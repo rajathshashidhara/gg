@@ -1,0 +1,45 @@
+syntax  = "proto3";
+package simpledb.proto;
+
+message GetRequest {
+    string key = 1;
+};
+
+message PutRequest {
+    string key = 1;
+    bytes val = 2;
+    bool immutable = 3;
+    bool executable = 4;
+};
+
+message DeleteRequest {
+    string key = 1;
+};
+
+message KV {
+    string key = 1;
+    bytes val = 2;
+};
+
+message ExecRequest {
+    string func = 1; /* Function name */
+    repeated bytes immediate_args = 2;
+    repeated string file_args = 3; /* (K,V) read and stored as file:///<blob_dir>/K */
+    repeated KV dict_args = 4;
+};
+
+message KVRequest {
+    uint64 id = 1;
+    oneof ReqOps {
+        GetRequest get_request = 2;
+        PutRequest put_request = 3;
+        DeleteRequest delete_request = 4;
+        ExecRequest exec_request = 5;
+    };
+};
+
+message KVResponse {
+    uint64 id = 1;
+    uint32 return_code = 2;
+    bytes val = 3;
+};

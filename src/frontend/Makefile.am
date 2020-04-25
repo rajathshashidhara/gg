@@ -9,8 +9,8 @@ GG_LDADD = ../execution/libggexecution.a \
            ../sandbox/libggsandbox.a \
            ../trace/libggtrace.a \
            ../trace/libggsyscalltable.a \
-           ../protobufs/libggprotobufs.a \
            ../net/libggnet.a \
+           ../protobufs/libggprotobufs.a \
            ../tui/libggtui.a \
            ../util/libggutil.a
 

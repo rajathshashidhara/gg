@@ -8,6 +8,7 @@ Makefile.in
 *.log
 *.trs
 .dirstamp
+.vscode
 
 /INSTALL
 /aclocal.m4
