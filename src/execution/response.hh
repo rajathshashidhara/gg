@@ -10,6 +10,7 @@
 #include <sys/types.h>
 
 #include "util/optional.hh"
+#include "protobufs/gg.pb.h"
 
 class FetchDependenciesError : public std::exception {};
 class ExecutionError : public std::exception {};
@@ -52,7 +53,7 @@ public:
   std::string stdout {};
 
   static ExecutionResponse parse_message( const std::string & message );
-  static ExecutionResponse ExecutionResponse::parse_message
+  static ExecutionResponse parse_message
                 ( const gg::protobuf::ExecutionResponse & response_proto );
 };
 

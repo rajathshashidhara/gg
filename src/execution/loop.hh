@@ -89,7 +89,7 @@ public:
   template<class ConnectionType>
   uint64_t make_exec_request( const std::string & tag,
                               const Address & address,
-                              const gg::protobufs::ExecutionRequest & request,
+                              const gg::protobuf::ExecutionRequest & request,
                               ExecutionResponseCallbackFunc response_callback,
                               FailureCallbackFunc failure_callback );
 

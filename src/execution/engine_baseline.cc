@@ -4,17 +4,19 @@
 #include "engine_baseline.hh"
 #include "response.hh"
 #include "protobufs/gg.pb.h"
-
+#include "thunk/ggutils.hh"
+#include "util/base64.hh"
 
 using namespace std;
 using namespace gg;
 using namespace gg::thunk;
 
-ExecutionRequest BaselineExecutionEngine::generate_request(const Thunk& thunk)
+gg::protobuf::ExecutionRequest BaselineExecutionEngine::generate_request
+                                                (const Thunk& thunk)
 {
     static const bool timelog = (getenv("GG_TIMELOG") != nullptr);
 
-    ExecutionRequest request;
+    gg::protobuf::ExecutionRequest request;
 
     *request.add_thunks() = Thunk::execution_request(thunk);
     request.set_storage_backend(gg::remote::storage_backend_uri());
@@ -26,7 +28,7 @@ ExecutionRequest BaselineExecutionEngine::generate_request(const Thunk& thunk)
 void BaselineExecutionEngine::force_thunk(const Thunk& thunk,
                                 ExecutionLoop& exec_loop)
 {
-    ExecutionRequest request = move(generate_request(thunk));
+    gg::protobuf::ExecutionRequest request = move(generate_request(thunk));
     uint64_t connection_id = exec_loop.make_exec_request<TCPConnection>(
         thunk.hash(), address_, request,
         [this] (const uint64_t id, const string & thunk_hash,
@@ -44,7 +46,6 @@ void BaselineExecutionEngine::force_thunk(const Thunk& thunk,
             case JobStatus::Success:
             {
                 if ( response.thunk_hash != thunk_hash ) {
-                cerr << http_response.str() << endl;
                 throw runtime_error( "expected output for " +
                                     thunk_hash + ", got output for " +
                                     response.thunk_hash );
@@ -97,5 +98,6 @@ size_t BaselineExecutionEngine::job_count() const
 
 bool BaselineExecutionEngine::can_execute( const gg::thunk::Thunk & thunk ) const
 {
+  (void) thunk;
   return true;
 }

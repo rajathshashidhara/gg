@@ -8,6 +8,7 @@
 #include "engine.hh"
 #include "net/address.hh"
 #include "thunk/thunk.hh"
+#include "protobufs/gg.pb.h"
 
 class BaselineExecutionEngine : public ExecutionEngine
 {
@@ -17,14 +18,15 @@ private:
     size_t running_jobs_ {0};
     std::map<uint64_t, std::chrono::steady_clock::time_point> start_times_ {};
 
-    std::string generate_request(const gg::thunk::Thunk& thunk);
+    gg::protobuf::ExecutionRequest
+            generate_request(const gg::thunk::Thunk& thunk);
 
 public:
     BaselineExecutionEngine(const size_t max_jobs,
-            const std:string& ip,
+            const std::string& ip,
             const uint16_t port)
         : ExecutionEngine(max_jobs), address_(ip, port) {}
-    
+
     void force_thunk(const gg::thunk::Thunk& thunk,
             ExecutionLoop& exec_loop) override;
     bool is_remote() const { return true; }
