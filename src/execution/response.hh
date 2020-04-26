@@ -52,6 +52,8 @@ public:
   std::string stdout {};
 
   static ExecutionResponse parse_message( const std::string & message );
+  static ExecutionResponse ExecutionResponse::parse_message
+                ( const gg::protobuf::ExecutionResponse & response_proto );
 };
 
 #endif /* REMOTE_RESPONSE_HH */

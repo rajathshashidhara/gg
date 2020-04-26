@@ -14,6 +14,7 @@
 #include "net/http_response_parser.hh"
 #include "net/socket.hh"
 #include "net/nb_secure_socket.hh"
+#include "protobufs/gg.pb.h"
 #include "util/signalfd.hh"
 #include "util/child_process.hh"
 #include "util/poller.hh"
@@ -27,6 +28,9 @@ public:
   typedef std::function<void( const uint64_t id /* id */,
                               const std::string & /* tag */,
                               const HTTPResponse & )> HTTPResponseCallbackFunc;
+  typedef std::function<void( const uint64_t id /* id */,
+                              const std::string & /* tag */,
+                              const gg::protobuf::ExecutionResponse &)> ExecutionResponseCallbackFunc;
   typedef std::function<void( const uint64_t /* id */,
                               const std::string & /* tag */ )> FailureCallbackFunc;
 
@@ -80,6 +84,13 @@ public:
                               const Address & address,
                               const HTTPRequest & request,
                               HTTPResponseCallbackFunc response_callback,
+                              FailureCallbackFunc failure_callback );
+
+  template<class ConnectionType>
+  uint64_t make_exec_request( const std::string & tag,
+                              const Address & address,
+                              const gg::protobufs::ExecutionRequest & request,
+                              ExecutionResponseCallbackFunc response_callback,
                               FailureCallbackFunc failure_callback );
 
   uint64_t make_listener( const Address & address,

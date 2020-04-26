@@ -5,6 +5,7 @@
 #include <stdexcept>
 
 #include "net/http_response_parser.hh"
+#include "net/exec_response_parser.hh"
 #include "thunk/ggutils.hh"
 #include "util/exception.hh"
 #include "util/optional.hh"
@@ -256,6 +257,46 @@ uint64_t ExecutionLoop::make_http_request( const string & tag,
   auto connection = make_connection<ConnectionType>( address, data_callback, error_callback, close_callback );
 
   connection->write_buffer_ = move( request.str() );
+
+  return connection_id;
+}
+
+template<class ConnectionType>
+uint64_t ExecutionLoop::make_exec_request( const string & tag,
+                                           const Address & address,
+                                           const gg::protobuf::ExecutionRequest & request,
+                                           ExecutionResponseCallbackFunc response_callback,
+                                           FailureCallbackFunc failure_callback )
+{
+  const uint64_t connection_id = current_id_++;
+
+  auto parser = make_shared<ExecutionResponseParser>();
+
+  auto data_callback =
+    [parser, connection_id, tag, response_callback] (shared_ptr<ConnectionType>, string && data) {
+      parser->parse(data);
+
+      if (not parser->empty()) {
+        response_callback(connection_id, tag, parser->front());
+        parser->pop();
+        return false;
+      }
+
+      return true;
+    };
+
+  auto error_callback =
+    [connection_id, tag, failure_callback]
+    { failure_callback(connection_id, tag); };
+
+  auto close_callback = [] {};
+
+  auto connection = make_connection<ConnectionType>( address, data_callback, error_callback, close_callback );
+
+  string serialized_request(sizeof(size_t), 0);
+  *((size_t*) &serialized_request[0]) = request.ByteSize();
+  serialized_request.append(request.SerializeAsString());
+  connection->write_buffer_ = move(serialized_request);
 
   return connection_id;
 }
