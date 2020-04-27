@@ -20,6 +20,7 @@
 #include "execution/engine.hh"
 #include "execution/engine_local.hh"
 #include "execution/engine_lambda.hh"
+#include "execution/engine_baseline.hh"
 #include "execution/engine_gg.hh"
 #include "execution/engine_meow.hh"
 #include "execution/engine_gcloud.hh"
@@ -109,6 +110,21 @@ unique_ptr<ExecutionEngine> make_execution_engine( const EngineInfo & engine )
   else if ( engine_name == "lambda" ) {
     return make_unique<AWSLambdaExecutionEngine>( max_jobs, AWSCredentials(),
       engine_params.length() ? engine_params : AWS::region() );
+  }
+  else if ( engine_name == "baseline" ) {
+    if ( engine_params.length() == 0 ) {
+      throw runtime_error( "remote: missing host ip" );
+    }
+
+    uint16_t port = 8080;
+    string::size_type colonpos = engine_params.find( ':' );
+    string host_ip = engine_params.substr( 0, colonpos );
+
+    if ( colonpos != string::npos ) {
+      port = stoi( engine_params.substr( colonpos + 1 ) );
+    }
+
+    return make_unique<BaselineExecutionEngine>( max_jobs, Address { host_ip, port } );
   }
   else if ( engine_name == "remote" ) {
     if ( engine_params.length() == 0 ) {
