@@ -6,15 +6,15 @@
 #include <functional>
 
 #include "net/requests.hh"
+#include "net/address.hh"
 
 struct SimpleDBClientConfig
 {
-    std::string ip { "0.0.0.0" };
-    uint16_t port { 8080 };
+    unsigned num_;
+    std::vector<Address> address_;
 
-    size_t max_threads { 32 };
+    size_t max_threads { 4 };
     size_t max_batch_size { 32 };
-
 };
 
 class SimpleDB

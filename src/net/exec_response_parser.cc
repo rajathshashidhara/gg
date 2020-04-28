@@ -1,3 +1,4 @@
+#include <iostream>
 #include "exec_response_parser.hh"
 
 using namespace std;
@@ -6,6 +7,7 @@ using namespace gg::protobuf;
 bool ExecutionResponseParser::parsing_step()
 {
     ExecutionResponse resp;
+    string lenbuf;
 
     switch (state)
     {
@@ -13,8 +15,8 @@ bool ExecutionResponseParser::parsing_step()
         if (buffer_.size() < sizeof(in_progress_message_len))
             return false;
         
-        in_progress_message_len = 
-            stoul(buffer_.get_and_pop_bytes(sizeof(in_progress_message_len)));
+        lenbuf = buffer_.get_and_pop_bytes(sizeof(in_progress_message_len));
+        in_progress_message_len = *((size_t*) &lenbuf[0]);
         state = READ_PAYLOAD_PENDING;
 
         return true;

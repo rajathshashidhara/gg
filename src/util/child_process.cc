@@ -22,6 +22,7 @@ template <typename T> void zero( T & x ) { memset( &x, 0, sizeof( x ) ); }
 int do_fork()
 {
     /* Verify that process is single-threaded before forking */
+/*
     {
         struct stat my_stat;
         CheckSystemCall( "stat", stat( "/proc/self/task", &my_stat ) );
@@ -30,7 +31,7 @@ int do_fork()
             throw runtime_error( "ChildProcess constructed in multi-threaded program" );
         }
     }
-
+*/
     return CheckSystemCall( "fork", fork() );
 }
 

@@ -406,3 +406,10 @@ uint64_t ExecutionLoop::make_http_request<SSLConnection>( const string &,
                                                           const HTTPRequest &,
                                                           HTTPResponseCallbackFunc,
                                                           FailureCallbackFunc );
+
+template
+uint64_t ExecutionLoop::make_exec_request<TCPConnection>( const string &,
+                                                          const Address &,
+                                                          const gg::protobuf::ExecutionRequest &,
+                                                          ExecutionResponseCallbackFunc,
+                                                          FailureCallbackFunc );

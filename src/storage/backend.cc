@@ -15,6 +15,7 @@
 #include "util/digest.hh"
 #include "util/optional.hh"
 #include "util/uri.hh"
+#include "util/tokenize.hh"
 
 using namespace std;
 
@@ -63,8 +64,27 @@ unique_ptr<StorageBackend> StorageBackend::create_backend( const string & uri )
   }
   else if (endpoint.protocol == "sdb") {
     SimpleDBClientConfig config;
-    config.ip = endpoint.host;
-    config.port = endpoint.port.get_or(config.port);
+    if (endpoint.options.size() > 0)
+    {
+      config.num_ = (unsigned) stoul(endpoint.options["num"]);
+      for (int i = 0; i < config.num_; i++)
+      {
+        string host;
+        uint16_t port = 8080;
+
+        auto parts = split(endpoint.options["host" + to_string(i)], ":");
+        host = parts[0];
+        if (parts.size() > 1)
+          port = (uint16_t) stoul(parts[1]);
+
+        config.address_.emplace_back(host, port);
+      }
+    }
+    else
+    {
+      config.num_ = 1;
+      config.address_.emplace_back(endpoint.host, endpoint.port.get_or(8080));
+    }
 
     backend = make_unique<SimpleDBStorageBackend>(config);
   }

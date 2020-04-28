@@ -46,25 +46,25 @@ void BaselineExecutionEngine::force_thunk(const Thunk& thunk,
             case JobStatus::Success:
             {
                 if ( response.thunk_hash != thunk_hash ) {
-                throw runtime_error( "expected output for " +
-                                    thunk_hash + ", got output for " +
-                                    response.thunk_hash );
+                    throw runtime_error( "expected output for " +
+                                        thunk_hash + ", got output for " +
+                                        response.thunk_hash );
                 }
 
                 for ( const auto & output : response.outputs ) {
-                gg::cache::insert( gg::hash::for_output( response.thunk_hash, output.tag ), output.hash );
+                    gg::cache::insert( gg::hash::for_output( response.thunk_hash, output.tag ), output.hash );
 
-                if ( output.data.length() ) {
-                    roost::atomic_create( base64::decode( output.data ),
-                                        gg::paths::blob( output.hash ) );
-                }
+                    if ( output.data.length() ) {
+                        roost::atomic_create( base64::decode( output.data ),
+                                            gg::paths::blob( output.hash ) );
+                    }
                 }
 
                 gg::cache::insert( response.thunk_hash, response.outputs.at( 0 ).hash );
 
                 vector<ThunkOutput> thunk_outputs;
                 for ( auto & output : response.outputs ) {
-                thunk_outputs.emplace_back( move( output.hash ), move( output.tag ) );
+                    thunk_outputs.emplace_back( move( output.hash ), move( output.tag ) );
                 }
 
                 success_callback_( response.thunk_hash, move( thunk_outputs ), 0);

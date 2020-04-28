@@ -35,16 +35,24 @@ bool receive_response(int fd, KVResponse& resp)
 {
     size_t len;
     char* s;
-    static ssize_t slen = (ssize_t) sizeof(size_t);
+    const static ssize_t slen = (ssize_t) sizeof(size_t);
+    size_t offset;
+    ssize_t ret;
 
-    if (recv(fd, &len, sizeof(size_t), 0) < slen)
-        return false;
+    offset = 0;
+    while (offset < slen)
+    {
+        if ((ret = recv(fd, ((char*) &len) + offset, slen - offset, 0)) < 0)
+            return false;
+
+        offset += ret;
+    }
+
     s = new char[len];
     if (s == nullptr)
         return false;
 
-    size_t offset = 0;
-    ssize_t ret;
+    offset = 0;
     while (offset < len)
     {
         if ((ret = recv(fd, s + offset, len - offset, 0)) < 0)
@@ -86,8 +94,8 @@ void SimpleDB::upload_files(
 
                     struct sockaddr_in addr;
                     addr.sin_family = AF_INET;
-                    addr.sin_port = htons(config_.port);
-                    inet_aton(config_.ip.c_str(), &addr.sin_addr);
+                    addr.sin_port = htons(config_.address_[0].port);
+                    inet_aton(config_.address_[0].ip.c_str(), &addr.sin_addr);
 
                     if (connect(fd,
                         (const struct sockaddr*) &addr,
@@ -115,7 +123,7 @@ void SimpleDB::upload_files(
 
                             string contents;
                             FileDescriptor file {
-                                CheckSystemCall("open " + filename, 
+                                CheckSystemCall("open " + filename,
                                     open(filename.c_str(), O_RDONLY))
                             };
                             while (not file.eof())
@@ -145,7 +153,7 @@ void SimpleDB::upload_files(
                             if (!receive_response(fd, resp) ||
                                     resp.return_code() != 0)
                                 throw runtime_error("failed to get response");
-                            
+
                             const size_t response_index = resp.id();
                             success_callback(upload_requests[response_index]);
 
@@ -190,8 +198,8 @@ void SimpleDB::download_files(
 
                     struct sockaddr_in addr;
                     addr.sin_family = AF_INET;
-                    addr.sin_port = htons(config_.port);
-                    inet_aton(config_.ip.c_str(), &addr.sin_addr);
+                    addr.sin_port = htons(config_.address_[0].port);
+                    inet_aton(config_.address_[0].ip.c_str(), &addr.sin_addr);
 
                     if (connect(fd,
                         (const struct sockaddr*) &addr,
@@ -235,7 +243,7 @@ void SimpleDB::download_files(
                             if (!receive_response(fd, resp) ||
                                     resp.return_code() != 0)
                                 throw runtime_error("failed to get response");
-                            
+
                             const size_t response_index = resp.id();
                             const string & filename =
                                 download_requests.at(response_index).filename.string();

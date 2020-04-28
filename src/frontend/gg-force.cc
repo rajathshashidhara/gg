@@ -124,7 +124,7 @@ unique_ptr<ExecutionEngine> make_execution_engine( const EngineInfo & engine )
       port = stoi( engine_params.substr( colonpos + 1 ) );
     }
 
-    return make_unique<BaselineExecutionEngine>( max_jobs, Address { host_ip, port } );
+    return make_unique<BaselineExecutionEngine>( max_jobs, host_ip, port);
   }
   else if ( engine_name == "remote" ) {
     if ( engine_params.length() == 0 ) {
