@@ -10,11 +10,13 @@
 
 struct SimpleDBClientConfig
 {
-    unsigned num_;
+    unsigned num_ { 0 };
     std::vector<Address> address_;
 
     size_t max_threads { 4 };
     size_t max_batch_size { 32 };
+
+    SimpleDBClientConfig(): address_(0) {}
 };
 
 class SimpleDB

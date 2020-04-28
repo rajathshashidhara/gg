@@ -92,13 +92,9 @@ void SimpleDB::upload_files(
                         throw runtime_error("could not create socket");
                     }
 
-                    struct sockaddr_in addr;
-                    addr.sin_family = AF_INET;
-                    addr.sin_port = htons(config_.address_[0].port);
-                    inet_aton(config_.address_[0].ip.c_str(), &addr.sin_addr);
-
+                    auto addr = config_.address_[0].to_sockaddr();
                     if (connect(fd,
-                        (const struct sockaddr*) &addr,
+                        &addr,
                         sizeof(struct sockaddr)) < 0)
                     {
                         throw runtime_error("error connecting to \
@@ -196,13 +192,9 @@ void SimpleDB::download_files(
                         throw runtime_error("could not create socket");
                     }
 
-                    struct sockaddr_in addr;
-                    addr.sin_family = AF_INET;
-                    addr.sin_port = htons(config_.address_[0].port);
-                    inet_aton(config_.address_[0].ip.c_str(), &addr.sin_addr);
-
+                    auto addr = config_.address_[0].to_sockaddr();
                     if (connect(fd,
-                        (const struct sockaddr*) &addr,
+                        &addr,
                         sizeof(struct sockaddr)) < 0)
                     {
                         throw runtime_error("error connecting to \

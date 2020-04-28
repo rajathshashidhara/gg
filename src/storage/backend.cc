@@ -67,7 +67,7 @@ unique_ptr<StorageBackend> StorageBackend::create_backend( const string & uri )
     if (endpoint.options.size() > 0)
     {
       config.num_ = (unsigned) stoul(endpoint.options["num"]);
-      for (int i = 0; i < config.num_; i++)
+      for (unsigned i = 0; i < config.num_; i++)
       {
         string host;
         uint16_t port = 8080;
