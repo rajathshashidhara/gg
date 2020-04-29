@@ -1,4 +1,5 @@
 #include <thread>
+#include <mutex>
 #include <fstream>
 #include <streambuf>
 #include <sys/types.h>
@@ -9,9 +10,11 @@
 #include <fcntl.h>
 
 #include "net/simpledb.hh"
+#include "net/socket.hh"
 #include "protobufs/netformats.pb.h"
 #include "util/exception.hh"
 #include "util/file_descriptor.hh"
+#include "util/crc16.hh"
 
 using namespace std;
 using namespace simpledb::proto;
@@ -72,8 +75,13 @@ void SimpleDB::upload_files(
         const std::vector<storage::PutRequest> & upload_requests,
         const std::function<void(const storage::PutRequest&)>& success_callback)
 {
-    const size_t thread_count = config_.max_threads;
+    const size_t bucket_count = config_.num_;
+    const size_t thread_count = bucket_count;
     const size_t batch_size = config_.max_batch_size;
+
+    vector<vector<storage::PutRequest>> buckets(bucket_count);
+    vector<mutex> bucket_locks(bucket_count);
+    volatile bool barrier = false;
 
     vector<thread> threads;
     for (size_t thread_index = 0;
@@ -83,16 +91,31 @@ void SimpleDB::upload_files(
         if (thread_index < upload_requests.size())
         {
             threads.emplace_back(
-                [&](const size_t index)
+                [&, buckets, bucket_locks, barrier](const size_t index)
                 {
-                    int fd = socket(AF_INET,
-                                SOCK_STREAM, 0);
-                    if (fd < 0)
+                    for (size_t first_file_idx = index;
+                            first_file_idx < upload_requests.size();
+                            first_file_idx += thread_count * batch_size)
                     {
-                        throw runtime_error("could not create socket");
+                        for (size_t file_id = first_file_idx;
+                            file_id < min(upload_requests.size(),
+                            first_file_idx + thread_count * batch_size);
+                            file_id += thread_count)
+                        {
+                            const string & object_key =
+                                upload_requests.at(file_id).object_key;
+                            
+                            const auto idx = crc16(object_key) % bucket_count;
+                            bucket_locks[idx].lock();
+                            buckets[idx].emplace_back(move(upload_requests.at(file_id)));
+                            bucket_locks[idx].unlock();
+                        }
                     }
 
-                    auto addr = config_.address_[0].to_sockaddr();
+                    TCPSocket conn;
+                    conn.connect(config_.address_[index]);
+
+                    auto addr = config_.address_[index].to_sockaddr();
                     if (connect(fd,
                         &addr,
                         sizeof(struct sockaddr)) < 0)
@@ -101,21 +124,30 @@ void SimpleDB::upload_files(
                                             simpledb server");
                     }
 
-                    for (size_t first_file_idx = index;
-                            first_file_idx < upload_requests.size();
-                            first_file_idx += thread_count * batch_size)
+                    if (index == thread_count - 1)
+                    {
+                        barrier = true;
+                    }
+                    else
+                    {
+                        while (!barrier) {}
+                    }
+
+                    for (size_t first_file_idx = 0;
+                            first_file_idx < buckets[index].size();
+                            first_file_idx += batch_size)
                     {
                         size_t expected_responses = 0;
 
                         for (size_t file_id = first_file_idx;
-                            file_id < min(upload_requests.size(),
-                            first_file_idx + thread_count * batch_size);
-                            file_id += thread_count)
+                            file_id < min(buckets[index].size(),
+                            first_file_idx + batch_size);
+                            file_id += 1)
                         {
                             const string & filename =
-                                upload_requests.at(file_id).filename.string();
+                                buckets[index].at(file_id).filename.string();
                             const string & object_key =
-                                upload_requests.at(file_id).object_key;
+                                buckets[index].at(file_id).object_key;
 
                             string contents;
                             FileDescriptor file {
@@ -151,13 +183,11 @@ void SimpleDB::upload_files(
                                 throw runtime_error("failed to get response");
 
                             const size_t response_index = resp.id();
-                            success_callback(upload_requests[response_index]);
+                            success_callback(buckets[index][response_index]);
 
                             response_count++;
                         }
                     }
-
-                    close(fd);
                 },
                 thread_index
             );
@@ -172,8 +202,13 @@ void SimpleDB::download_files(
         const vector<storage::GetRequest>& download_requests,
         const function<void(const storage::GetRequest&)>& success_callback)
 {
-    const size_t thread_count = config_.max_threads;
+    const size_t bucket_count = config_.num_;
+    const size_t thread_count = bucket_count;
     const size_t batch_size = config_.max_batch_size;
+
+    vector<vector<storage::GetRequest>> buckets(bucket_count);
+    vector<mutex> bucket_locks(bucket_count);
+    volatile bool barrier = false;
 
     vector<thread> threads;
     for (size_t thread_index = 0;
@@ -183,30 +218,13 @@ void SimpleDB::download_files(
         if (thread_index < download_requests.size())
         {
             threads.emplace_back(
-                [&](const size_t index)
+                [&, buckets, bucket_locks, barrier](const size_t index)
                 {
-                    int fd = socket(AF_INET,
-                                SOCK_STREAM, 0);
-                    if (fd < 0)
-                    {
-                        throw runtime_error("could not create socket");
-                    }
-
-                    auto addr = config_.address_[0].to_sockaddr();
-                    if (connect(fd,
-                        &addr,
-                        sizeof(struct sockaddr)) < 0)
-                    {
-                        throw runtime_error("error connecting to \
-                                            simpledb server");
-                    }
-
+                    
                     for (size_t first_file_idx = index;
                             first_file_idx < download_requests.size();
                             first_file_idx += thread_count * batch_size)
                     {
-                        size_t expected_responses = 0;
-
                         for (size_t file_id = first_file_idx;
                             file_id < min(download_requests.size(),
                             first_file_idx + thread_count * batch_size);
@@ -214,6 +232,39 @@ void SimpleDB::download_files(
                         {
                             const string & object_key =
                                 download_requests.at(file_id).object_key;
+                            
+                            const auto idx = crc16(object_key) % bucket_count;
+                            bucket_locks[idx].lock();
+                            buckets[idx].emplace_back(move(download_requests.at(file_id)));
+                            bucket_locks[idx].unlock();
+                        }
+                    }
+
+                    TCPSocket conn;
+                    conn.connect(config_.address_[index]);
+
+                    if (index == thread_count - 1)
+                    {
+                        barrier = true;
+                    }
+                    else
+                    {
+                        while (!barrier) {}
+                    }
+
+                    for (size_t first_file_idx = 0;
+                            first_file_idx < buckets[index].size();
+                            first_file_idx += batch_size)
+                    {
+                        size_t expected_responses = 0;
+
+                        for (size_t file_id = first_file_idx;
+                            file_id < min(buckets[index].size(),
+                            first_file_idx + batch_size);
+                            file_id += 1)
+                        {
+                            const string & object_key =
+                                buckets[index].at(file_id).object_key;
 
                             KVRequest req;
                             req.set_id(file_id);
@@ -238,19 +289,17 @@ void SimpleDB::download_files(
 
                             const size_t response_index = resp.id();
                             const string & filename =
-                                download_requests.at(response_index).filename.string();
+                                buckets[index].at(response_index).filename.string();
 
                             roost::atomic_create(resp.val(), filename,
-                                download_requests[response_index].mode.initialized(),
-                                download_requests[response_index].mode.get_or(0));
+                                buckets[index][response_index].mode.initialized(),
+                                buckets[index][response_index].mode.get_or(0));
 
-                            success_callback(download_requests[response_index]);
+                            success_callback(buckets[index][response_index]);
 
                             response_count++;
                         }
                     }
-
-                    close(fd);
                 },
                 thread_index
             );
