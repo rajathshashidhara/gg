@@ -1,5 +1,6 @@
 #include <thread>
 #include <mutex>
+#include <atomic>
 #include <fstream>
 #include <streambuf>
 #include <sys/types.h>
@@ -34,7 +35,7 @@ static inline bool receive_response(TCPSocket& socket, KVResponse& resp)
     size_t len;
     const static size_t slen = sizeof(size_t);
 
-    *len = *((size_t*) (&socket.read_exactly(slen)[0]));
+    len = *((size_t*) (&socket.read_exactly(slen)[0]));
 
     if (!resp.ParseFromString(socket.read_exactly(len)))
         return false;
@@ -53,6 +54,7 @@ void SimpleDB::upload_files(
     vector<vector<storage::PutRequest>> buckets(bucket_count);
     vector<mutex> bucket_locks(bucket_count);
     volatile bool barrier = false;
+    atomic<int> barrier {0};
 
     vector<thread> threads;
     for (size_t thread_index = 0;
@@ -62,10 +64,10 @@ void SimpleDB::upload_files(
         if (thread_index < upload_requests.size())
         {
             threads.emplace_back(
-                [&, buckets, bucket_locks, barrier](const size_t index,
+                [&](const size_t index,
                         vector<vector<storage::PutRequest>>& buckets,
                         vector<mutex>& bucket_locks,
-                        volatile bool& barrier)
+                        atomic<int>& barrier)
                 {
                     for (size_t first_file_idx = index;
                             first_file_idx < upload_requests.size();
@@ -91,11 +93,11 @@ void SimpleDB::upload_files(
 
                     if (index == thread_count - 1)
                     {
-                        barrier = true;
+                        barrier = 1;
                     }
                     else
                     {
-                        while (!barrier) {}
+                        while (barrier == 0) { this_thread::yield(); }
                     }
 
                     for (size_t first_file_idx = 0;
@@ -152,7 +154,7 @@ void SimpleDB::upload_files(
                         }
                     }
                 },
-                thread_index, buckets, bucket_locks, barrier
+                thread_index, ref(buckets), ref(bucket_locks), ref(barrier)
             );
         }
     }
@@ -171,7 +173,7 @@ void SimpleDB::download_files(
 
     vector<vector<storage::GetRequest>> buckets(bucket_count);
     vector<mutex> bucket_locks(bucket_count);
-    volatile bool barrier = false;
+    atomic<int> barrier {0};
 
     vector<thread> threads;
     for (size_t thread_index = 0;
@@ -181,10 +183,10 @@ void SimpleDB::download_files(
         if (thread_index < download_requests.size())
         {
             threads.emplace_back(
-                [&, buckets, bucket_locks, barrier](const size_t index,
-                        vector<vector<storage::PutRequest>>& buckets,
+                [&](const size_t index,
+                        vector<vector<storage::GetRequest>>& buckets,
                         vector<mutex>& bucket_locks,
-                        volatile bool& barrier)
+                        atomic<int>& barrier)
                 {
                     
                     for (size_t first_file_idx = index;
@@ -211,11 +213,11 @@ void SimpleDB::download_files(
 
                     if (index == thread_count - 1)
                     {
-                        barrier = true;
+                        barrier = 1;
                     }
                     else
                     {
-                        while (!barrier) {}
+                        while (barrier == 0) { this_thread::yield(); }
                     }
 
                     for (size_t first_file_idx = 0;
@@ -247,7 +249,7 @@ void SimpleDB::download_files(
                         {
                             KVResponse resp;
 
-                            if (!receive_response(fd, resp) ||
+                            if (!receive_response(conn resp) ||
                                     resp.return_code() != 0)
                                 throw runtime_error("failed to get response");
 
@@ -265,7 +267,7 @@ void SimpleDB::download_files(
                         }
                     }
                 },
-                thread_index, buckets, bucket_locks, barrier
+                thread_index, ref(buckets), ref(bucket_locks), ref(barrier)
             );
         }
     }
