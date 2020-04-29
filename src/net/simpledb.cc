@@ -19,55 +19,26 @@
 using namespace std;
 using namespace simpledb::proto;
 
-static inline bool send_request(int fd, KVRequest& req)
+static inline void send_request(TCPSocket& socket, KVRequest& req)
 {
     std::string req_s = req.SerializeAsString();
     size_t len = req_s.length();
-    static ssize_t slen = (ssize_t) sizeof(size_t);
+    static size_t slen = (ssize_t) sizeof(size_t);
 
-    if (send(fd, &len, sizeof(size_t), 0) < slen)
-        return false;
-
-    if (send(fd, req_s.c_str(), len, 0) < (ssize_t)len)
-        return false;
-
-    return true;
+    socket.write(string((char*) &len, slen));
+    socket.write(req_s);
 }
 
-bool receive_response(int fd, KVResponse& resp)
+static inline bool receive_response(TCPSocket& socket, KVResponse& resp)
 {
     size_t len;
-    char* s;
-    const static ssize_t slen = (ssize_t) sizeof(size_t);
-    size_t offset;
-    ssize_t ret;
+    const static size_t slen = sizeof(size_t);
 
-    offset = 0;
-    while (offset < slen)
-    {
-        if ((ret = recv(fd, ((char*) &len) + offset, slen - offset, 0)) < 0)
-            return false;
+    *len = *((size_t*) (&socket.read_exactly(slen)[0]));
 
-        offset += ret;
-    }
-
-    s = new char[len];
-    if (s == nullptr)
+    if (!resp.ParseFromString(socket.read_exactly(len)))
         return false;
 
-    offset = 0;
-    while (offset < len)
-    {
-        if ((ret = recv(fd, s + offset, len - offset, 0)) < 0)
-            return false;
-
-        offset += ret;
-    }
-
-    if (!resp.ParseFromArray(s, len))
-        return false;
-
-    delete s;
     return true;
 }
 
@@ -91,7 +62,10 @@ void SimpleDB::upload_files(
         if (thread_index < upload_requests.size())
         {
             threads.emplace_back(
-                [&, buckets, bucket_locks, barrier](const size_t index)
+                [&, buckets, bucket_locks, barrier](const size_t index,
+                        vector<vector<storage::PutRequest>>& buckets,
+                        vector<mutex>& bucket_locks,
+                        volatile bool& barrier)
                 {
                     for (size_t first_file_idx = index;
                             first_file_idx < upload_requests.size();
@@ -114,15 +88,6 @@ void SimpleDB::upload_files(
 
                     TCPSocket conn;
                     conn.connect(config_.address_[index]);
-
-                    auto addr = config_.address_[index].to_sockaddr();
-                    if (connect(fd,
-                        &addr,
-                        sizeof(struct sockaddr)) < 0)
-                    {
-                        throw runtime_error("error connecting to \
-                                            simpledb server");
-                    }
 
                     if (index == thread_count - 1)
                     {
@@ -166,9 +131,7 @@ void SimpleDB::upload_files(
                             put->set_immutable(false);
                             put->set_executable(false);
 
-                            if (!send_request(fd, req))
-                                throw runtime_error("failed to send request");
-
+                            send_request(conn, req);
                             expected_responses++;
                         }
 
@@ -178,7 +141,7 @@ void SimpleDB::upload_files(
                         {
                             KVResponse resp;
 
-                            if (!receive_response(fd, resp) ||
+                            if (!receive_response(conn, resp) ||
                                     resp.return_code() != 0)
                                 throw runtime_error("failed to get response");
 
@@ -189,7 +152,7 @@ void SimpleDB::upload_files(
                         }
                     }
                 },
-                thread_index
+                thread_index, buckets, bucket_locks, barrier
             );
         }
     }
@@ -218,7 +181,10 @@ void SimpleDB::download_files(
         if (thread_index < download_requests.size())
         {
             threads.emplace_back(
-                [&, buckets, bucket_locks, barrier](const size_t index)
+                [&, buckets, bucket_locks, barrier](const size_t index,
+                        vector<vector<storage::PutRequest>>& buckets,
+                        vector<mutex>& bucket_locks,
+                        volatile bool& barrier)
                 {
                     
                     for (size_t first_file_idx = index;
@@ -271,9 +237,7 @@ void SimpleDB::download_files(
                             auto put = req.mutable_get_request();
                             put->set_key(object_key);
 
-                            if (!send_request(fd, req))
-                                throw runtime_error("failed to send request");
-
+                            send_request(conn, req);
                             expected_responses++;
                         }
 
@@ -301,7 +265,7 @@ void SimpleDB::download_files(
                         }
                     }
                 },
-                thread_index
+                thread_index, buckets, bucket_locks, barrier
             );
         }
     }
