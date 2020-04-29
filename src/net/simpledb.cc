@@ -53,7 +53,6 @@ void SimpleDB::upload_files(
 
     vector<vector<storage::PutRequest>> buckets(bucket_count);
     vector<mutex> bucket_locks(bucket_count);
-    volatile bool barrier = false;
     atomic<int> barrier {0};
 
     vector<thread> threads;
@@ -249,7 +248,7 @@ void SimpleDB::download_files(
                         {
                             KVResponse resp;
 
-                            if (!receive_response(conn resp) ||
+                            if (!receive_response(conn, resp) ||
                                     resp.return_code() != 0)
                                 throw runtime_error("failed to get response");
 
