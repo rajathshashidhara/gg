@@ -29,12 +29,28 @@ void BaselineExecutionEngine::force_thunk(const Thunk& thunk,
                                 ExecutionLoop& exec_loop)
 {
     gg::protobuf::ExecutionRequest request = move(generate_request(thunk));
+    size_t worker = max_jobs_;
+
+    for (size_t idx = 0; idx < max_jobs_; idx++)
+    {
+        if (worker_state_[idx] == State::Idle)
+        {
+            worker = idx;
+            break;
+        }
+    }
+
+    if (worker == max_jobs_)
+        throw runtime_error("All tasks are busy!");
+
+    worker_state_[worker] = State::Busy;
     uint64_t connection_id = exec_loop.make_exec_request<TCPConnection>(
-        thunk.hash(), address_, request,
-        [this] (const uint64_t id, const string & thunk_hash,
+        thunk.hash(), address_[worker], request,
+        [this, worker] (const uint64_t id, const string & thunk_hash,
             const gg::protobuf::ExecutionResponse & exec_response) -> bool
         {
             running_jobs_--;
+            worker_state_[worker] = State::Idle;
 
             ExecutionResponse response = ExecutionResponse::parse_message(exec_response);
             /* print the output, if there's any */
@@ -79,10 +95,12 @@ void BaselineExecutionEngine::force_thunk(const Thunk& thunk,
 
             return false;
         },
-        [this] ( const uint64_t id, const string & thunk_hash )
+        [this, worker] ( const uint64_t id, const string & thunk_hash )
         {
-        start_times_.erase( id );
-        failure_callback_( thunk_hash, JobStatus::SocketFailure );
+            running_jobs_--;
+            worker_state_[worker] = State::Idle;
+            start_times_.erase( id );
+            failure_callback_( thunk_hash, JobStatus::SocketFailure );
         }
     );
 

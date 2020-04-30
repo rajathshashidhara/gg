@@ -31,6 +31,7 @@
 #include "util/path.hh"
 #include "util/timeit.hh"
 #include "util/util.hh"
+#include "util/tokenize.hh"
 
 using namespace std;
 using namespace gg::thunk;
@@ -116,15 +117,23 @@ unique_ptr<ExecutionEngine> make_execution_engine( const EngineInfo & engine )
       throw runtime_error( "remote: missing host ip" );
     }
 
-    uint16_t port = 8080;
-    string::size_type colonpos = engine_params.find( ':' );
-    string host_ip = engine_params.substr( 0, colonpos );
+    vector<Address> workers;
+    for (auto &addr : split(engine_params, "&"))
+    {
+      uint16_t port = 8080;
+      string::size_type colonpos = engine_params.find( ':' );
+      string host_ip = engine_params.substr( 0, colonpos );
 
-    if ( colonpos != string::npos ) {
-      port = stoi( engine_params.substr( colonpos + 1 ) );
+      if ( colonpos != string::npos ) {
+        port = stoi( engine_params.substr( colonpos + 1 ) );
+      }
+
+      workers.emplace_back(host_ip, port);
     }
+    if (workers.size() != max_jobs)
+      throw runtime_error("baseline: incorrect args");
 
-    return make_unique<BaselineExecutionEngine>( max_jobs, host_ip, port);
+    return make_unique<BaselineExecutionEngine>( max_jobs, workers );
   }
   else if ( engine_name == "remote" ) {
     if ( engine_params.length() == 0 ) {
