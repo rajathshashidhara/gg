@@ -8,13 +8,13 @@
 #include <functional>
 #include <unordered_map>
 #include <type_traits>
-#include <google/protobuf/message.h>
 
 #include "connection.hh"
 #include "net/http_response.hh"
 #include "net/http_response_parser.hh"
 #include "net/socket.hh"
 #include "net/nb_secure_socket.hh"
+#include "google/protobuf/message.h"
 #include "util/signalfd.hh"
 #include "util/child_process.hh"
 #include "util/poller.hh"
@@ -28,9 +28,11 @@ public:
   typedef std::function<void( const uint64_t id /* id */,
                               const std::string & /* tag */,
                               const HTTPResponse & )> HTTPResponseCallbackFunc;
-  typedef std::function<void( const uint64_t id /* id */,
+  template <class T>
+  using ProtobufResponseCallbackFunc =
+          std::function<void( const uint64_t id /* id */,
                               const std::string & /* tag */,
-                              const google::protobuf::Message &)> ProtobufResponseCallbackFunc;
+                              const T &)>;
   typedef std::function<void( const uint64_t /* id */,
                               const std::string & /* tag */ )> FailureCallbackFunc;
 
@@ -86,11 +88,11 @@ public:
                               HTTPResponseCallbackFunc response_callback,
                               FailureCallbackFunc failure_callback );
 
-  template<class ConnectionType>
+  template<class ConnectionType, class RequestType, class ResponseType>
   uint64_t make_protobuf_request( const std::string & tag,
                               const Address & address,
-                              const google::protobuf::Message & request,
-                              ProtobufResponseCallbackFunc response_callback,
+                              const RequestType & request,
+                              ProtobufResponseCallbackFunc<ResponseType> response_callback,
                               FailureCallbackFunc failure_callback );
 
   uint64_t make_listener( const Address & address,

@@ -9,6 +9,7 @@
 #include "thunk/ggutils.hh"
 #include "util/exception.hh"
 #include "util/optional.hh"
+#include "protobufs/gg.pb.h"
 
 using namespace std;
 using namespace PollerShortNames;
@@ -261,13 +262,19 @@ uint64_t ExecutionLoop::make_http_request( const string & tag,
   return connection_id;
 }
 
-template<class ConnectionType>
-uint64_t make_protobuf_request( const std::string & tag,
-                                const Address & address,
-                                const google::protobuf::Message & request,
-                                ProtobufResponseCallbackFunc response_callback,
-                                FailureCallbackFunc failure_callback )
+template<class ConnectionType, class RequestType, class ResponseType>
+uint64_t ExecutionLoop::make_protobuf_request( const std::string & tag,
+                                              const Address & address,
+                                              const RequestType & request,
+                                              ProtobufResponseCallbackFunc<ResponseType>
+                                                          response_callback,
+                                              FailureCallbackFunc failure_callback )
 {
+  static_assert(is_base_of<google::protobuf::Message, RequestType>::value,
+                          "Request not a protobuf type");
+  static_assert(is_base_of<google::protobuf::Message, ResponseType>::value,
+                          "Response not a protobuf type");
+
   const uint64_t connection_id = current_id_++;
 
   auto parser = make_shared<ExecutionResponseParser>();
@@ -410,6 +417,6 @@ uint64_t ExecutionLoop::make_http_request<SSLConnection>( const string &,
 template
 uint64_t ExecutionLoop::make_protobuf_request<TCPConnection>( const string &,
                                                               const Address &,
-                                                              const google::protobuf::Message &,
-                                                              ProtobufResponseCallbackFunc,
+                                                              const gg::protobuf::ExecutionRequest &,
+                                                              ProtobufResponseCallbackFunc<gg::protobuf::ExecutionResponse>,
                                                               FailureCallbackFunc );
