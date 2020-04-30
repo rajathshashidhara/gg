@@ -53,7 +53,7 @@ void SimpleDB::upload_files(
 
     vector<vector<storage::PutRequest>> buckets(bucket_count);
     vector<mutex> bucket_locks(bucket_count);
-    atomic<int> barrier {thread_count};
+    atomic<size_t> barrier {thread_count};
 
     vector<thread> threads;
     for (size_t thread_index = 0;
@@ -64,13 +64,18 @@ void SimpleDB::upload_files(
             [&](const size_t index,
                     vector<vector<storage::PutRequest>>& buckets,
                     vector<mutex>& bucket_locks,
-                    atomic<int>& barrier)
+                    atomic<size_t>& barrier)
             {
                 const size_t start_file_idx = index * (upload_requests.size()/thread_count);
-                const size_t end_file_idx = (index + 1) * (upload_requests.size()/thread_count);
+                size_t end_file_idx = (index + 1) * (upload_requests.size()/thread_count);
 
-                for (size_t file_id = first_file_idx;
-                    file_id < end_file_idx);
+                if (index == (min(thread_count, upload_requests.size()) - 1))
+                {
+                    end_file_idx = upload_requests.size();
+                }
+
+                for (size_t file_id = start_file_idx;
+                    file_id < end_file_idx;
                     file_id += 1)
                 {
                     const string & object_key =
@@ -78,7 +83,7 @@ void SimpleDB::upload_files(
 
                     const auto idx = crc16(object_key) % bucket_count;
                     bucket_locks[idx].lock();
-                    buckets[idx].emplace_back(move(download_requests.at(file_id)));
+                    buckets[idx].emplace_back(move(upload_requests.at(file_id)));
                     bucket_locks[idx].unlock();
                 }
 
@@ -93,26 +98,45 @@ void SimpleDB::upload_files(
                     std::cerr << "Upload=" << upload_requests.size();
                     for (size_t tidx = 0; tidx < thread_count; tidx++)
                     {
-                        std::cerr << " tIdx" << tidx << "=" << buckets[tidx].size();
+                        std::cerr << " bIdx" << tidx << "=" << buckets[tidx].size();
                     }
                     std::cerr << std::endl;
                 }
 
+                size_t proc_idx = bucket_count;
+                size_t non_empty = 0;
+                for (size_t idx = 0; idx < bucket_count; idx++)
+                {
+                    if (buckets[idx].size() == 0)
+                        continue;
+
+                    if (non_empty == index)
+                    {
+                        proc_idx = idx;
+                        break;
+                    }
+                    non_empty++;
+                }
+
+                std::cerr << "tIdx"<<tidx <<"=" << proc_idx << std::endl;
+                if (proc_idx == bucket_count)
+                    return;
+
                 for (size_t first_file_idx = 0;
-                        first_file_idx < buckets[index].size();
+                        first_file_idx < buckets[proc_idx].size();
                         first_file_idx += batch_size)
                 {
                     size_t expected_responses = 0;
 
                     for (size_t file_id = first_file_idx;
-                        file_id < min(buckets[index].size(),
+                        file_id < min(buckets[proc_idx].size(),
                         first_file_idx + batch_size);
                         file_id += 1)
                     {
                         const string & filename =
-                            buckets[index].at(file_id).filename.string();
+                            buckets[proc_idx].at(file_id).filename.string();
                         const string & object_key =
-                            buckets[index].at(file_id).object_key;
+                            buckets[proc_idx].at(file_id).object_key;
 
                         string contents;
                         FileDescriptor file {
@@ -146,7 +170,7 @@ void SimpleDB::upload_files(
                             throw runtime_error("failed to get response");
 
                         const size_t response_index = resp.id();
-                        success_callback(buckets[index][response_index]);
+                        success_callback(buckets[proc_idx][response_index]);
 
                         response_count++;
                     }
@@ -170,7 +194,7 @@ void SimpleDB::download_files(
 
     vector<vector<storage::GetRequest>> buckets(bucket_count);
     vector<mutex> bucket_locks(bucket_count);
-    atomic<int> barrier {thread_count};
+    atomic<size_t> barrier {thread_count};
 
     vector<thread> threads;
     for (size_t thread_index = 0;
@@ -181,19 +205,19 @@ void SimpleDB::download_files(
             [&](const size_t index,
                     vector<vector<storage::GetRequest>>& buckets,
                     vector<mutex>& bucket_locks,
-                    atomic<int>& barrier)
+                    atomic<size_t>& barrier)
             {
 
                 const size_t start_file_idx = index * (download_requests.size()/thread_count);
-                const size_t end_file_idx = (index + 1) * (download_requests.size()/thread_count);
+                size_t end_file_idx = (index + 1) * (download_requests.size()/thread_count);
 
                 if (index == (min(thread_count, download_requests.size()) - 1))
                 {
                     end_file_idx = download_requests.size();
                 }
 
-                for (size_t file_id = first_file_idx;
-                    file_id < end_file_idx);
+                for (size_t file_id = start_file_idx;
+                    file_id < end_file_idx;
                     file_id += 1)
                 {
                     const string & object_key =
@@ -221,19 +245,38 @@ void SimpleDB::download_files(
                     std::cerr << std::endl;
                 }
 
+                size_t proc_idx = bucket_count;
+                size_t non_empty = 0;
+                for (size_t idx = 0; idx < bucket_count; idx++)
+                {
+                    if (buckets[idx].size() == 0)
+                        continue;
+
+                    if (non_empty == index)
+                    {
+                        proc_idx = idx;
+                        break;
+                    }
+                    non_empty++;
+                }
+
+                std::cerr << "tIdx"<<tidx <<"=" << proc_idx << std::endl;
+                if (proc_idx == bucket_count)
+                    return;
+
                 for (size_t first_file_idx = 0;
-                        first_file_idx < buckets[index].size();
+                        first_file_idx < buckets[proc_idx].size();
                         first_file_idx += batch_size)
                 {
                     size_t expected_responses = 0;
 
                     for (size_t file_id = first_file_idx;
-                        file_id < min(buckets[index].size(),
+                        file_id < min(buckets[proc_idx].size(),
                         first_file_idx + batch_size);
                         file_id += 1)
                     {
                         const string & object_key =
-                            buckets[index].at(file_id).object_key;
+                            buckets[proc_idx].at(file_id).object_key;
 
                         KVRequest req;
                         req.set_id(file_id);
@@ -256,13 +299,13 @@ void SimpleDB::download_files(
 
                         const size_t response_index = resp.id();
                         const string & filename =
-                            buckets[index].at(response_index).filename.string();
+                            buckets[proc_idx].at(response_index).filename.string();
 
                         roost::atomic_create(resp.val(), filename,
-                            buckets[index][response_index].mode.initialized(),
-                            buckets[index][response_index].mode.get_or(0));
+                            buckets[proc_idx][response_index].mode.initialized(),
+                            buckets[proc_idx][response_index].mode.get_or(0));
 
-                        success_callback(buckets[index][response_index]);
+                        success_callback(buckets[proc_idx][response_index]);
 
                         response_count++;
                     }
