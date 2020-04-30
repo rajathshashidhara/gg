@@ -87,16 +87,13 @@ void SimpleDB::upload_files(
                     bucket_locks[idx].unlock();
                 }
 
-                TCPSocket conn;
-                conn.connect(config_.address_[index]);
-
                 barrier.fetch_add(-1);
                 while (barrier != 0) { this_thread::yield(); }
 
                 if (index == 0)
                 {
                     std::cerr << "Upload=" << upload_requests.size();
-                    for (size_t tidx = 0; tidx < thread_count; tidx++)
+                    for (size_t tidx = 0; tidx < bucket_count; tidx++)
                     {
                         std::cerr << " bIdx" << tidx << "=" << buckets[tidx].size();
                     }
@@ -118,9 +115,12 @@ void SimpleDB::upload_files(
                     non_empty++;
                 }
 
-                std::cerr << "tIdx"<<tidx <<"=" << proc_idx << std::endl;
+                std::cerr << "tIdx"<< index <<"=" << proc_idx << std::endl;
                 if (proc_idx == bucket_count)
                     return;
+
+                TCPSocket conn;
+                conn.connect(config_.address_[proc_idx]);
 
                 for (size_t first_file_idx = 0;
                         first_file_idx < buckets[proc_idx].size();
@@ -229,18 +229,15 @@ void SimpleDB::download_files(
                     bucket_locks[idx].unlock();
                 }
 
-                TCPSocket conn;
-                conn.connect(config_.address_[index]);
-
                 barrier.fetch_add(-1);
                 while (barrier != 0) { this_thread::yield(); }
 
                 if (index == 0)
                 {
                     std::cerr << "Download=" << download_requests.size();
-                    for (size_t tidx = 0; tidx < thread_count; tidx++)
+                    for (size_t tidx = 0; tidx < bucket_count; tidx++)
                     {
-                        std::cerr << " tIdx" << tidx << "=" << buckets[tidx].size();
+                        std::cerr << " bIdx" << tidx << "=" << buckets[tidx].size();
                     }
                     std::cerr << std::endl;
                 }
@@ -260,9 +257,12 @@ void SimpleDB::download_files(
                     non_empty++;
                 }
 
-                std::cerr << "tIdx"<<tidx <<"=" << proc_idx << std::endl;
+                std::cerr << "tIdx"<< index <<"=" << proc_idx << std::endl;
                 if (proc_idx == bucket_count)
                     return;
+
+                TCPSocket conn;
+                conn.connect(config_.address_[proc_idx]);
 
                 for (size_t first_file_idx = 0;
                         first_file_idx < buckets[proc_idx].size();
