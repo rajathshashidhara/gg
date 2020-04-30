@@ -262,11 +262,11 @@ uint64_t ExecutionLoop::make_http_request( const string & tag,
 }
 
 template<class ConnectionType>
-uint64_t ExecutionLoop::make_exec_request( const string & tag,
-                                           const Address & address,
-                                           const gg::protobuf::ExecutionRequest & request,
-                                           ExecutionResponseCallbackFunc response_callback,
-                                           FailureCallbackFunc failure_callback )
+uint64_t make_protobuf_request( const std::string & tag,
+                                const Address & address,
+                                const google::protobuf::Message & request,
+                                ProtobufResponseCallbackFunc response_callback,
+                                FailureCallbackFunc failure_callback )
 {
   const uint64_t connection_id = current_id_++;
 
@@ -408,8 +408,8 @@ uint64_t ExecutionLoop::make_http_request<SSLConnection>( const string &,
                                                           FailureCallbackFunc );
 
 template
-uint64_t ExecutionLoop::make_exec_request<TCPConnection>( const string &,
-                                                          const Address &,
-                                                          const gg::protobuf::ExecutionRequest &,
-                                                          ExecutionResponseCallbackFunc,
-                                                          FailureCallbackFunc );
+uint64_t ExecutionLoop::make_protobuf_request<TCPConnection>( const string &,
+                                                              const Address &,
+                                                              const google::protobuf::Message &,
+                                                              ProtobufResponseCallbackFunc,
+                                                              FailureCallbackFunc );
