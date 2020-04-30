@@ -121,11 +121,11 @@ unique_ptr<ExecutionEngine> make_execution_engine( const EngineInfo & engine )
     for (auto &addr : split(engine_params, "&"))
     {
       uint16_t port = 8080;
-      string::size_type colonpos = engine_params.find( ':' );
-      string host_ip = engine_params.substr( 0, colonpos );
+      string::size_type colonpos = addr.find( ':' );
+      string host_ip = addr.substr( 0, colonpos );
 
       if ( colonpos != string::npos ) {
-        port = stoi( engine_params.substr( colonpos + 1 ) );
+        port = stoi( addr.substr( colonpos + 1 ) );
       }
 
       workers.emplace_back(host_ip, port);
