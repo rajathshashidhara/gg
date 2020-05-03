@@ -6,7 +6,8 @@
 
 #include "protobufs/gg.pb.h"
 
-class ExecutionResponseParser
+template <class Message>
+class ProtobufStreamParser
 {
 private:
     class InternalBuffer
@@ -38,34 +39,37 @@ private:
     InternalBuffer buffer_ {};
 
     /* complete messages ready to go */
-    std::queue<gg::protobuf::ExecutionResponse> complete_messages_ {};
+    std::queue<Message> complete_messages_ {};
 
     bool parsing_step();
 
 protected:
-    enum ExecutionResponseParseState {
+    enum ProtobufStreamParseState {
         READ_LEN_PENDING,
         READ_PAYLOAD_PENDING
     };
 
     size_t in_progress_message_len;
-    ExecutionResponseParseState state;
+    ProtobufStreamParseState state;
 
 public:
-    ExecutionResponseParser()
-        : in_progress_message_len(0), state(READ_LEN_PENDING) {}
-    ~ExecutionResponseParser() {}
+    ProtobufStreamParser()
+        : in_progress_message_len(0), state(READ_LEN_PENDING) {
+            static_assert(std::is_base_of<google::protobuf::Message, Message>::value,
+                "Invalid substitution in ProtobufStreamParser");
+    }
+    ~ProtobufStreamParser() {}
 
     /* must accept all of buf */
     void parse( const std::string & buf );
 
     /* getters */
     bool empty() const { return complete_messages_.empty(); }
-    const gg::protobuf::ExecutionResponse & front() const 
+    const Message & front() const 
         { return complete_messages_.front(); }
 
     /* pop one request */
-    void pop() { complete_messages_.pop(); }  
+    void pop() { complete_messages_.pop(); }
 };
 
 #endif /* EXEC_RESPONSE_PARSER_HH */

@@ -16,16 +16,11 @@ message DeleteRequest {
     string key = 1;
 };
 
-message KV {
-    string key = 1;
-    bytes val = 2;
-};
-
 message ExecRequest {
     string func = 1; /* Function name */
     repeated bytes immediate_args = 2;
     repeated string file_args = 3; /* (K,V) read and stored as file:///<blob_dir>/K */
-    repeated KV dict_args = 4;
+    repeated string dict_args = 4; /* Provided as (K, V) */
 };
 
 message KVRequest {

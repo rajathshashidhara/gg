@@ -25,7 +25,7 @@ bin_PROGRAMS = gg gg-trace gg-describe gg-force-and-run gg-force gg-mock \
 dist_bin_SCRIPTS = gg-create-blueprints gg-collect-dir gg-build-infer
 
 if BUILD_STATIC_BINS
-  bin_PROGRAMS += gg-execute-static gg-meow-worker-static
+  bin_PROGRAMS += gg-execute-static gg-meow-worker-static gg-execute-simpledb-static
 endif
 
 gg_SOURCES = gg.cc
@@ -92,6 +92,10 @@ gg_meow_worker_LDADD = $(BASE_LDADD) $(CRYPTO_LIBS) $(SSL_LIBS)
 gg_meow_worker_static_SOURCES = gg-meow-worker.cc
 gg_meow_worker_static_LDADD = $(BASE_LDADD) $(CRYPTO_LIBS) $(SSL_LIBS) -ldl -lz
 gg_meow_worker_static_LDFLAGS = -static -s -Wl,--whole-archive -lpthread -Wl,--no-whole-archive
+
+gg_execute_simpledb_static_SOURCES = gg-execute-simpledb.cc cpplambda.cpp
+gg_execute_simpledb_static_LDADD = $(BASE_LDADD) $(CRYPTO_LIBS) $(SSL_LIBS) -ldl -lz
+gg_execute_simpledb_static_LDFLAGS = -static -s -Wl,--whole-archive -lpthread -Wl,--no-whole-archive
 
 gg_object_server_SOURCES = gg-object-server.cc
 gg_object_server_LDADD = $(BASE_LDADD) $(CRYPTO_LIBS) $(SSL_LIBS)

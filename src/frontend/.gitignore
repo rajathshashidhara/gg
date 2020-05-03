@@ -8,6 +8,7 @@ gg-mock
 gg-force
 gg-execute
 gg-execute-static
+gg-execute-simpledb-static
 gg-infer
 gg-thunkgraph
 gg-thunksummary

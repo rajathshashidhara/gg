@@ -1,4 +1,4 @@
-source = thunk.proto gg.proto meow.proto netformats.proto
+source = thunk.proto gg.proto meow.proto netformats.proto execformats.proto
 
 SUFFIXES = .proto .pb.cc
 

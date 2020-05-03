@@ -14,6 +14,7 @@ libggexecution_a_SOURCES = response.hh response.cc \
                            engine_gg.hh engine_gg.cc \
                            engine_gcloud.hh engine_gcloud.cc \
                            engine_baseline.hh engine_baseline.cc \
+                           engine_simpledb.hh engine_simpledb.cc \
                            meow/message.hh meow/message.cc \
                            meow/util.hh meow/util.cc \
                            engine_meow.hh engine_meow.cc \

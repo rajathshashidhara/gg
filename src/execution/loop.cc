@@ -5,7 +5,7 @@
 #include <stdexcept>
 
 #include "net/http_response_parser.hh"
-#include "net/exec_response_parser.hh"
+#include "net/protobuf_stream_parser.hh"
 #include "thunk/ggutils.hh"
 #include "util/exception.hh"
 #include "util/optional.hh"
@@ -277,7 +277,7 @@ uint64_t ExecutionLoop::make_protobuf_request( const std::string & tag,
 
   const uint64_t connection_id = current_id_++;
 
-  auto parser = make_shared<ExecutionResponseParser>();
+  auto parser = make_shared<ProtobufStreamParser<gg::protobuf::ExecutionResponse>>();
 
   auto data_callback =
     [parser, connection_id, tag, response_callback] (shared_ptr<ConnectionType>, string && data) {

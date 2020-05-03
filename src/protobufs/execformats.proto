@@ -1,0 +1,23 @@
+syntax  = "proto3";
+package simpledb.proto;
+
+import "netformats.proto";
+
+message KV {
+    string key = 1;
+    bytes val = 2;
+};
+
+message ExecArgs {
+    string function = 1;
+    repeated bytes args = 2;
+    repeated bytes fargs = 3;   // Input provided as files
+    repeated KV kwargs = 4;
+};
+
+message ExecResponse {
+    int32 return_code = 1;
+    bytes return_output = 2;
+    repeated PutRequest f_output = 3;   // Data stored as files
+    repeated PutRequest kw_output = 4;
+};

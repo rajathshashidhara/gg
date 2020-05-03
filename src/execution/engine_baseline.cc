@@ -44,7 +44,10 @@ void BaselineExecutionEngine::force_thunk(const Thunk& thunk,
         throw runtime_error("All tasks are busy!");
 
     worker_state_[worker] = State::Busy;
-    uint64_t connection_id = exec_loop.make_protobuf_request<TCPConnection>(
+    uint64_t connection_id =
+    exec_loop.make_protobuf_request<TCPConnection, 
+                                    gg::protobuf::ExecutionRequest,
+                                    gg::protobuf::ExecutionResponse>(
         thunk.hash(), address_[worker], request,
         [this, worker] (const uint64_t id, const string & thunk_hash,
             const gg::protobuf::ExecutionResponse & exec_response) -> bool

@@ -24,6 +24,7 @@
 #include "execution/engine_gg.hh"
 #include "execution/engine_meow.hh"
 #include "execution/engine_gcloud.hh"
+#include "execution/engine_simpledb.hh"
 #include "tui/status_bar.hh"
 #include "util/digest.hh"
 #include "util/exception.hh"
@@ -134,6 +135,29 @@ unique_ptr<ExecutionEngine> make_execution_engine( const EngineInfo & engine )
       throw runtime_error("baseline: incorrect args");
 
     return make_unique<BaselineExecutionEngine>( max_jobs, workers );
+  }
+  else if ( engine_name == "sdb" ) {
+    if ( engine_params.length() == 0 ) {
+      throw runtime_error( "remote: missing host ip" );
+    }
+
+    vector<Address> workers;
+    for (auto &addr : split(engine_params, "&"))
+    {
+      uint16_t port = 8080;
+      string::size_type colonpos = addr.find( ':' );
+      string host_ip = addr.substr( 0, colonpos );
+
+      if ( colonpos != string::npos ) {
+        port = stoi( addr.substr( colonpos + 1 ) );
+      }
+
+      workers.emplace_back(host_ip, port);
+    }
+    if (workers.size() != max_jobs)
+      throw runtime_error("baseline: incorrect args");
+
+    return make_unique<SimpleDBExecutionEngine>( max_jobs, workers );
   }
   else if ( engine_name == "remote" ) {
     if ( engine_params.length() == 0 ) {

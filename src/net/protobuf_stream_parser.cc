@@ -1,12 +1,14 @@
 #include <iostream>
-#include "exec_response_parser.hh"
+#include "protobuf_stream_parser.hh"
+#include "protobufs/netformats.pb.h"
 
 using namespace std;
 using namespace gg::protobuf;
 
-bool ExecutionResponseParser::parsing_step()
+template <class Message>
+bool ProtobufStreamParser<Message>::parsing_step()
 {
-    ExecutionResponse resp;
+    Message resp;
     string lenbuf;
 
     switch (state)
@@ -39,7 +41,8 @@ bool ExecutionResponseParser::parsing_step()
     }
 }
 
-void ExecutionResponseParser::parse(const string& buf)
+template <class Message>
+void ProtobufStreamParser<Message>::parse(const string& buf)
 {
     /* append buf to internal buffer */
     buffer_.append( buf );
@@ -47,3 +50,8 @@ void ExecutionResponseParser::parse(const string& buf)
     /* parse as much as we can */
     while ( parsing_step() ) {}   
 }
+
+template class
+ProtobufStreamParser<gg::protobuf::ExecutionResponse>;
+template class
+ProtobufStreamParser<simpledb::proto::KVResponse>;
