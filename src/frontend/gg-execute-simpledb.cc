@@ -189,6 +189,33 @@ void do_cleanup( const Thunk & thunk )
   }
 }
 
+void fetch_dependencies(const Thunk& thunk)
+{
+  static const char * __gg_exec_dir = getenv( "GG_EXEC_DIR" );
+
+  try {
+    auto check_dep =
+      []( const Thunk::DataItem & item ) -> void
+      {
+        const auto target_path = gg::paths::blob( item.first );
+        const auto source_path = roost::path(__gg_exec_dir) / item.first;
+
+        if (not roost::exists( target_path )) {
+          roost::symlink(target_path, source_path);
+        }
+      };
+
+    for_each( thunk.values().cbegin(), thunk.values().cend(),
+              check_dep );
+
+    for_each( thunk.executables().cbegin(), thunk.executables().cend(),
+              check_dep );
+  }
+  catch ( const exception & ex ) {
+    throw_with_nested( FetchDependenciesError {} );
+  }
+}
+
 void upload_output(ExecResponse& _response, const vector<string> & output_hashes)
 {
   auto *f_output = _response.mutable_f_output();
@@ -298,6 +325,8 @@ int gg_execute_main( int argc, char * argv[], ExecResponse& _response)
       }
 
       if ( timelog.initialized() ) { timelog->add_point( "do_cleanup" ); }
+
+      fetch_dependencies(thunk);
 
       if ( timelog.initialized() ) { timelog->add_point( "get_dependencies" ); }
 

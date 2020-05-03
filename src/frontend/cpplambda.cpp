@@ -17,8 +17,12 @@ static inline int parse_args(ExecArgs& args)
 
 static inline int return_output(const ExecResponse& resp)
 {
-    if (!resp.SerializeToOstream(&std::cout))
-        return -1;
+    size_t len = resp.ByteSize();
+    std::string output(sizeof(size_t), 0);
+    *((size_t*) &output[0]) = len;
+    output.append(resp.SerializeAsString());
+
+    std::cout.write(&output[0], output.length());
 
     return 0;
 }
