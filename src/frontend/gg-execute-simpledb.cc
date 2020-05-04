@@ -200,9 +200,13 @@ void fetch_dependencies(const Thunk& thunk)
         const auto target_path = gg::paths::blob( item.first );
         const auto source_path = roost::path(__gg_exec_dir) / item.first;
 
-        if (not roost::exists( target_path )) {
-          roost::symlink(target_path, source_path);
+        cerr << "[FETCH] target=" << target_path.string() << " source=" << source_path.string() << endl;
+
+        if (roost::exists(target_path)) {
+          roost::remove(target_path);
         }
+
+        roost::copy_then_rename(source_path, target_path, true, 0544);
       };
 
     for_each( thunk.values().cbegin(), thunk.values().cend(),
@@ -221,6 +225,7 @@ void upload_output(ExecResponse& _response, const vector<string> & output_hashes
   auto *f_output = _response.mutable_f_output();
   for (const string& output_hash : output_hashes)
   {
+    cerr << "[UPLOAD-F] Key=" << output_hash << " Path=" << gg::paths::blob(output_hash).string() << endl;
     auto request = f_output->Add();
     request->set_key(output_hash);
     request->set_val(gg::paths::blob(output_hash).string());
@@ -268,98 +273,111 @@ int gg_execute_main( int argc, char * argv[], ExecResponse& _response)
       return to_underlying( JobStatus::OperationalFailure );
     }
 
-    bool cleanup = false;
+    bool cleanup = true;
     bool upload_timelog = false;
     Optional<TimeLog> timelog;
 
-    const option command_line_options[] = {
-      { "cleanup",          no_argument, nullptr, 'C' },
-      { "timelog",          no_argument, nullptr, 'T' },
-      { nullptr, 0, nullptr, 0 },
-    };
+    // const option command_line_options[] = {
+    //   { "cleanup",          no_argument, nullptr, 'C' },
+    //   { "timelog",          no_argument, nullptr, 'T' },
+    //   { "upload-timelog",   no_argument, nullptr, 'u'},
+    //   { nullptr, 0, nullptr, 0 },
+    // };
 
-    while ( true ) {
-      const int opt = getopt_long( argc, argv, "uCT", command_line_options, nullptr );
+    // while ( true ) {
+    //   const int opt = getopt_long( argc, argv, "uCT", command_line_options, nullptr );
 
-      if ( opt == -1 ) {
-        break;
-      }
+    //   if ( opt == -1 ) {
+    //     break;
+    //   }
 
-      switch ( opt ) {
-      case 'C': cleanup = true; break;
-      case 'T': timelog.reset(); break;
-      case 'u': upload_timelog = true; break;
+    //   switch ( opt ) {
+    //   case 'C': cleanup = true; break;
+    //   case 'T': timelog.reset(); break;
+    //   case 'u': upload_timelog = true; break;
 
-      default:
-        throw runtime_error( "invalid option: " + string { argv[ optind - 1 ] } );
-      }
-    }
+    //   default:
+    //     throw runtime_error( "invalid option: " + string { argv[ optind - 1 ] } );
+    //   }
+    // }
 
-    vector<string> thunk_hashes;
+    // if (argc < optind + 2)
+    // {
+    //   usage(argv[0]);
+    //   return to_underlying( JobStatus::OperationalFailure );
+    // }
 
-    for ( int i = optind; i < argc; i++ ) {
-      thunk_hashes.push_back( argv[ i ] );
-    }
-
-    if ( thunk_hashes.size() == 0 ) {
-      usage( argv[ 0 ] );
+    if (argc < 3)
+    {
+      usage(argv[0]);
       return to_underlying( JobStatus::OperationalFailure );
     }
 
+    string thunk_hash(argv[1]);
+    string thunk_data(argv[2]);
+    const string thunk_path = gg::paths::blob( thunk_hash ).string();
+    FileDescriptor raw_thunk { CheckSystemCall( "open( " + thunk_path + " )",
+                                                open( thunk_path.c_str(), O_CREAT | O_RDWR , 0544) ) };
+    raw_thunk.write(thunk_data);
+
     gg::models::init();
 
-    for ( const string & thunk_hash : thunk_hashes ) {
-      /* take out an advisory lock on the thunk, in case
-         other gg-execute processes are running at the same time */
-      const string thunk_path = gg::paths::blob( thunk_hash ).string();
-      FileDescriptor raw_thunk { CheckSystemCall( "open( " + thunk_path + " )",
-                                                  open( thunk_path.c_str(), O_RDONLY ) ) };
-      raw_thunk.block_for_exclusive_lock();
+    cerr << "Thunk= " << thunk_hash << endl;
+    // /* take out an advisory lock on the thunk, in case
+    //     other gg-execute processes are running at the same time */
+    // const string thunk_path = gg::paths::blob( thunk_hash ).string();
+    // FileDescriptor raw_thunk { CheckSystemCall( "open( " + thunk_path + " )",
+    //                                             open( thunk_path.c_str(), O_RDONLY ) ) };
+    raw_thunk.block_for_exclusive_lock();
 
-      Thunk thunk = ThunkReader::read( thunk_path );
+    Thunk thunk = ThunkReader::read( thunk_path );
 
-      if ( timelog.initialized() ) { timelog->add_point( "read_thunk" ); }
+    if ( timelog.initialized() ) { timelog->add_point( "read_thunk" ); }
 
-      if ( cleanup ) {
-        do_cleanup( thunk );
+    if ( cleanup ) {
+      do_cleanup( thunk );
+    }
+
+    if ( timelog.initialized() ) { timelog->add_point( "do_cleanup" ); }
+
+    fetch_dependencies(thunk);
+
+    if ( timelog.initialized() ) { timelog->add_point( "get_dependencies" ); }
+
+    vector<string> output_hashes = execute_thunk( thunk );
+
+    if ( timelog.initialized() ) { timelog->add_point( "execute" ); }
+
+    upload_output(_response, output_hashes);
+
+    if ( timelog.initialized() ) { timelog->add_point( "upload_output" ); }
+
+    if ( timelog.initialized() and upload_timelog) {
+      unordered_map<string, string> output_values;
+      output_values["timelog-" + thunk_hash] = timelog->str();
+      upload_output(_response, output_values);
+    }
+    else if ( timelog.initialized() ) {
+      _stdoutstream << timelog->str() << endl;
+    }
+
+    auto thunk_response = execution_response.add_executed_thunks();
+    thunk_response->set_thunk_hash(thunk_hash);
+    for (const auto& output_tag: thunk.outputs())
+    {
+      Optional<cache::ReductionResult> result = gg::cache::check(gg::hash::for_output(thunk_hash, output_tag));
+
+      if ( not result.initialized() ) {
+        throw runtime_error( "output not found" );
       }
 
-      if ( timelog.initialized() ) { timelog->add_point( "do_cleanup" ); }
+      auto output_item = thunk_response->add_outputs();
+      output_item->set_tag(output_tag);
+      output_item->set_hash(result->hash);
 
-      fetch_dependencies(thunk);
-
-      if ( timelog.initialized() ) { timelog->add_point( "get_dependencies" ); }
-
-      vector<string> output_hashes = execute_thunk( thunk );
-
-      if ( timelog.initialized() ) { timelog->add_point( "execute" ); }
-
-      upload_output(_response, output_hashes);
-
-      if ( timelog.initialized() ) { timelog->add_point( "upload_output" ); }
-
-      if ( timelog.initialized() and upload_timelog) {
-        unordered_map<string, string> output_values;
-        output_values["timelog-" + thunk_hash] = timelog->str();
-        upload_output(_response, output_values);
-      }
-      else if ( timelog.initialized() ) {
-        _stdoutstream << timelog->str() << endl;
-      }
-
-      auto thunk_response = execution_response.add_executed_thunks();
-      thunk_response->set_thunk_hash(thunk_hash);
-      for (const auto& output_tag: thunk.outputs())
+      if (result->hash.length() > 0 && result->hash[0] == 'T')
       {
-        Optional<cache::ReductionResult> result = gg::cache::check(gg::hash::for_output(thunk_hash, output_tag));
-
-        if ( not result.initialized() ) {
-          throw runtime_error( "output not found" );
-        }
-
-        auto output_item = thunk_response->add_outputs();
-        output_item->set_tag(output_tag);
-        output_item->set_hash(result->hash);
+        output_item->set_data(move(roost::read_file(gg::paths::blob(result->hash))));
       }
     }
 
@@ -382,11 +400,13 @@ int gg_execute_main( int argc, char * argv[], ExecResponse& _response)
     ret = to_underlying( JobStatus::OperationalFailure );
   }
 
+  cerr << "Return code=" << ret << endl;
   execution_response.set_return_code(ret);
   execution_response.set_stdout(_stdoutstream.str());
 
   _response.set_return_code(0);
   _response.set_return_output(execution_response.SerializeAsString());
+//  cerr << "Return output=" << _response.return_output() << endl;
 
   return 0;
 }
@@ -413,17 +433,13 @@ void lambda_exec(const ExecArgs& params,
       throw runtime_error("Too many arguments");
   }
 
-  for (const string& arg : params.fargs())
-  {
-    vargs.push_back(arg);
-    argv[i] = &(vargs[i][0]);
-    i++;
-  
-    if (i >= MAX_CMD_ARGS)
-      throw runtime_error("Too many arguments");
-  }
+  // for (const string& arg: vargs)
+  // {
+  //   cerr << arg << " ";
+  // }
+  // cerr << endl;
 
-  auto ret = gg_execute_main(i, argv, resp);
-  resp.set_return_code(ret);
-  resp.set_return_output(move(_stdoutstream.str()));
+  gg_execute_main(i, argv, resp);
+  // resp.set_return_code(ret);
+  // resp.set_return_output(move(_stdoutstream.str()));
 }

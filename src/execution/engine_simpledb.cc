@@ -8,6 +8,7 @@
 #include "protobufs/netformats.pb.h"
 #include "protobufs/util.hh"
 #include "thunk/ggutils.hh"
+#include "thunk/thunk_writer.hh"
 #include "util/iterator.hh"
 
 using namespace std;
@@ -30,7 +31,8 @@ void SimpleDBExecutionEngine::init(ExecutionLoop& loop)
                     this->workers_[idx].parser.parse(data);
                     while (not this->workers_[idx].parser.empty())
                     {
-                        auto &response = this->workers_[idx].parser.front();
+                        auto response = this->workers_[idx].parser.front();
+                        this->workers_[idx].parser.pop();
                         auto &thunk = this->workers_[idx].executing_thunk.get();
 
                         if (response.return_code() != 0)
@@ -41,11 +43,22 @@ void SimpleDBExecutionEngine::init(ExecutionLoop& loop)
 
                         gg::protobuf::ExecutionResponse exec_resp;
                         protoutil::from_string(response.val(), exec_resp);
+                        if (JobStatus::Success != static_cast<JobStatus>(exec_resp.return_code()))
+                        {
+                            failure_callback_(thunk.hash(), static_cast<JobStatus>(exec_resp.return_code()));
+                            return true;
+                        }
 
                         for (const auto& executed_thunk: exec_resp.executed_thunks())
                         {
                             for ( const auto & output : executed_thunk.outputs()) {
                                 gg::cache::insert(gg::hash::for_output(executed_thunk.thunk_hash(), output.tag()), output.hash());
+
+                                if (output.data().length() > 0)
+                                {
+                                    roost::atomic_create(output.data(),
+                                                        gg::paths::blob(output.hash()));
+                                }
                             }
 
                             gg::cache::insert(executed_thunk.thunk_hash(), executed_thunk.outputs(0).hash());
@@ -95,17 +108,18 @@ size_t SimpleDBExecutionEngine::prepare_worker(
                         const Thunk& thunk,
                         KVRequest& request)
 {
-    static const bool timelog = ( getenv( "GG_TIMELOG" ) != nullptr );
+    // static const bool timelog = ( getenv( "GG_TIMELOG" ) != nullptr );
     static string exec_func_ = "gg-execute-simpledb-static";
 
     request.set_id(finished_jobs_++);
     auto exec_request = request.mutable_exec_request();
     exec_request->set_func(exec_func_);
 
-    exec_request->add_immediate_args("--cleanup");
-    if (timelog)
-        exec_request->add_immediate_args("--timelog");
+    // exec_request->add_immediate_args("--cleanup");
+    // if (timelog)
+    //     exec_request->add_immediate_args("--timelog");
     exec_request->add_immediate_args(thunk.hash());
+    exec_request->add_immediate_args(ThunkWriter::serialize(thunk));
 
     for (const auto & item : join_containers(thunk.values(), thunk.executables()))
     {
