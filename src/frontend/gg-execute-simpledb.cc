@@ -322,6 +322,8 @@ int gg_execute_main( int argc, char * argv[], ExecResponse& _response)
 
     gg::models::init();
 
+    timelog.reset();
+
     cerr << "Thunk= " << thunk_hash << endl;
     // /* take out an advisory lock on the thunk, in case
     //     other gg-execute processes are running at the same time */

@@ -10,6 +10,7 @@
 #include "thunk/ggutils.hh"
 #include "thunk/thunk_writer.hh"
 #include "util/iterator.hh"
+#include "util/crc16.hh"
 
 using namespace std;
 using namespace gg;
@@ -43,6 +44,7 @@ void SimpleDBExecutionEngine::init(ExecutionLoop& loop)
 
                         gg::protobuf::ExecutionResponse exec_resp;
                         protoutil::from_string(response.val(), exec_resp);
+                        std::cerr << exec_resp.stdout() << endl;
                         if (JobStatus::Success != static_cast<JobStatus>(exec_resp.return_code()))
                         {
                             failure_callback_(thunk.hash(), static_cast<JobStatus>(exec_resp.return_code()));
@@ -65,6 +67,8 @@ void SimpleDBExecutionEngine::init(ExecutionLoop& loop)
 
                             vector<ThunkOutput> thunk_outputs;
                             for (auto & output : executed_thunk.outputs()) {
+                                if (crc16(output.hash()) % this->workers_.size() != idx)
+                                    this->workers_[idx].objects.insert(output.hash());
                                 thunk_outputs.emplace_back(move(output.hash()), move(output.tag()));
                             }
 
@@ -106,7 +110,8 @@ bool SimpleDBExecutionEngine::can_execute( const Thunk & thunk ) const
 
 size_t SimpleDBExecutionEngine::prepare_worker(
                         const Thunk& thunk,
-                        KVRequest& request)
+                        KVRequest& request,
+                        const SelectionStrategy s)
 {
     // static const bool timelog = ( getenv( "GG_TIMELOG" ) != nullptr );
     static string exec_func_ = "gg-execute-simpledb-static";
@@ -129,8 +134,128 @@ size_t SimpleDBExecutionEngine::prepare_worker(
     if (free_workers_.size() == 0)
         throw runtime_error("No free workers to pick from.");
 
-    // Add Selection strategies here!
-    return *free_workers_.begin();
+    size_t selected_worker = numeric_limits<size_t>::max();
+    switch (s)
+    {
+        case SelectionStrategy::First:
+            selected_worker = *free_workers_.begin();
+            break;
+
+        case SelectionStrategy::MostObjectsWeight:
+        {
+            size_t max_common_size = 0;
+
+            unordered_set<string> thunk_objects;
+            for ( const auto & item : join_containers(thunk.values(), thunk.executables())) {
+                thunk_objects.insert( item.first );
+            }
+
+            for (const auto & free_lambda : free_workers_) {
+                const auto &worker = workers_.at( free_lambda );
+                size_t common_size = 0;
+
+                for ( const string & obj : thunk_objects ) {
+                    if (crc16(obj) % workers_.size() == free_lambda)
+                    {
+                        common_size += gg::hash::size(obj);
+                    }
+                    else if (worker.objects.count( obj ) ) {
+                        common_size += gg::hash::size(obj);
+                    }
+                }
+
+                if ( common_size > max_common_size ) {
+                    selected_worker = free_lambda;
+                    max_common_size = common_size;
+                }
+            }
+
+            if (selected_worker == numeric_limits<size_t>::max()) {
+                selected_worker = *free_workers_.begin();
+            }
+            break;
+        }
+
+        case SelectionStrategy::MostObjects:
+        {
+            size_t max_common_size = 0;
+
+            unordered_set<string> thunk_objects;
+            for ( const auto & item : join_containers(thunk.values(), thunk.executables())) {
+                thunk_objects.insert( item.first );
+            }
+
+            for (const auto & free_lambda : free_workers_) {
+                const auto &worker = workers_.at( free_lambda );
+                size_t common_size = 0;
+
+                for ( const string & obj : thunk_objects ) {
+                    if (crc16(obj) % workers_.size() == free_lambda)
+                    {
+                        common_size += 1;
+                    }
+                    else if (worker.objects.count( obj ) ) {
+                        common_size += 1;
+                    }
+                }
+
+                if ( common_size > max_common_size ) {
+                    selected_worker = free_lambda;
+                    max_common_size = common_size;
+                }
+            }
+
+            if (selected_worker == numeric_limits<size_t>::max()) {
+                selected_worker = *free_workers_.begin();
+            }
+            break;
+        }
+
+        case SelectionStrategy::Random:
+        {
+            // Not yet implemented!
+            selected_worker = *free_workers_.begin();
+            break;
+        }
+
+        case SelectionStrategy::LargestObject:
+        {
+            /* what's the largest object in this thunk? */
+            string largest_hash;
+            uint32_t largest_size = 0;
+
+            for ( const auto & item : join_containers( thunk.values(), thunk.executables() ) ) {
+                if ( gg::hash::size( item.first ) > largest_size ) {
+                    largest_size = gg::hash::size( item.first );
+                    largest_hash = item.first;
+                }
+            }
+
+            if ( largest_hash.length() ) {
+                for ( const auto & free_worker : free_workers_ ) {
+                    if ( workers_.at( free_worker ).objects.count( largest_hash ) ) {
+                        selected_worker = free_worker;
+                        break;
+                    }
+                }
+            }
+
+            if (selected_worker == numeric_limits<size_t>::max()) {
+                selected_worker = *free_workers_.begin();
+            }
+            break;
+        }
+
+        default:
+            throw runtime_error( "invalid selection strategy" );
+    }
+
+    for (const auto & item : join_containers(thunk.values(), thunk.executables()))
+    {
+        workers_[selected_worker].objects.insert(item.first);
+    }
+
+    return selected_worker;
 }
 
 void SimpleDBExecutionEngine::force_thunk(const Thunk& thunk, ExecutionLoop & loop)

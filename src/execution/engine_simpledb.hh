@@ -34,7 +34,7 @@ private:
 
     enum class SelectionStrategy
     {
-    First, Random, MostObjects, LargestObject, LRU,
+    First, Random, MostObjects, MostObjectsWeight, LargestObject,
     };
 
     uint64_t finished_jobs_ { 0 };
@@ -43,7 +43,8 @@ private:
     std::set<size_t> free_workers_ {};
 
     size_t prepare_worker(const gg::thunk::Thunk& thunk,
-            simpledb::proto::KVRequest& exec_request);
+            simpledb::proto::KVRequest& exec_request,
+            const SelectionStrategy s = SelectionStrategy::First);
 
 public:
     SimpleDBExecutionEngine(const size_t max_jobs,

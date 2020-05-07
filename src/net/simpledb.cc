@@ -152,7 +152,7 @@ void SimpleDB::upload_files(
                         auto put = req.mutable_put_request();
                         put->set_val(move(contents));
                         put->set_key(object_key);
-                        put->set_immutable(false);
+                        put->set_immutable(true);
                         put->set_executable(false);
 
                         send_request(conn, req);
