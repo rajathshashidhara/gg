@@ -21,7 +21,7 @@ class ProgramFinished : public exception {};
 
 void SimpleDBExecutionEngine::init(ExecutionLoop& loop)
 {
-    for (size_t idx = 0; idx < max_jobs_; idx++)
+    for (size_t idx = 0; idx < address_.size(); idx++)
     {
         shared_ptr<TCPConnection> connection =
             loop.make_connection<TCPConnection>(
@@ -34,7 +34,7 @@ void SimpleDBExecutionEngine::init(ExecutionLoop& loop)
                     {
                         auto response = this->workers_[idx].parser.front();
                         this->workers_[idx].parser.pop();
-                        auto &thunk = this->workers_[idx].executing_thunk.get();
+                        auto &thunk = this->workers_[idx].executing_thunks[response.id()].get();
 
                         if (response.return_code() != 0)
                         {
@@ -78,6 +78,7 @@ void SimpleDBExecutionEngine::init(ExecutionLoop& loop)
                         break;
                     }
 
+                    workers_.at(idx).scheduled_jobs_--;
                     workers_.at(idx).state = State::Idle;
                     free_workers_.insert(idx);
                     running_jobs_--;
@@ -92,7 +93,7 @@ void SimpleDBExecutionEngine::init(ExecutionLoop& loop)
                 }
         );
 
-        workers_.emplace_back(idx, move(connection));
+        workers_.emplace_back(idx, max(1ul, max_jobs_/address_.size()), move(connection));
         free_workers_.insert(idx);
     }
 }
@@ -264,11 +265,19 @@ void SimpleDBExecutionEngine::force_thunk(const Thunk& thunk, ExecutionLoop & lo
 
     KVRequest request;
     const size_t worker_idx = prepare_worker(thunk, request);
+    const size_t slot = workers_[worker_idx].idx;
+    workers_[worker_idx].idx++;
+    if (workers_[worker_idx].idx >= workers_[worker_idx].num_pipeline)
+        workers_[worker_idx].idx = 0;
+    workers_[worker_idx].scheduled_jobs_++;
+    workers_[worker_idx].executing_thunks[slot].reset(thunk);
 
     running_jobs_++;
-    workers_[worker_idx].state = State::Busy;
-    workers_[worker_idx].executing_thunk.reset(thunk);
-    free_workers_.erase(worker_idx);
+    if (workers_[worker_idx].scheduled_jobs_ == workers_[worker_idx].num_pipeline)
+    {
+        workers_[worker_idx].state = State::Busy;
+        free_workers_.erase(worker_idx);
+    }
 
     string s_request_(sizeof(size_t), 0);
     *((size_t*) &s_request_[0]) = request.ByteSize();

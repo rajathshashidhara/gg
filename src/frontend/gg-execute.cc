@@ -345,16 +345,17 @@ int main( int argc, char * argv[] )
 
       if ( timelog.initialized() ) { timelog->add_point( "upload_output" ); }
 
-      if ( timelog.initialized() and storage_backend != nullptr ) {
-        TempFile tmplog { "/tmp/timelog" };
-        tmplog.fd().write( timelog->str(), true );
-        tmplog.fd().close();
+      // if ( timelog.initialized() and storage_backend != nullptr ) {
+      //   TempFile tmplog { "/tmp/timelog" };
+      //   tmplog.fd().write( timelog->str(), true );
+      //   tmplog.fd().close();
 
-        vector<storage::PutRequest> requests;
-        requests.emplace_back( tmplog.name(), "timelog/" + thunk_hash );
-        storage_backend->put( requests );
-      }
-      else if ( timelog.initialized() ) {
+      //   vector<storage::PutRequest> requests;
+      //   requests.emplace_back( tmplog.name(), "timelog/" + thunk_hash );
+      //   storage_backend->put( requests );
+      // }
+
+      if ( timelog.initialized() ) {
         cout << timelog->str() << endl;
       }
     }

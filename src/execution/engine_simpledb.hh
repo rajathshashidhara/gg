@@ -22,14 +22,19 @@ private:
     struct Worker
     {
         size_t id;
+        const size_t num_pipeline;
+        size_t scheduled_jobs_ { 0 };
+        size_t idx {0};
         State state { State::Idle };
         std::shared_ptr<TCPConnection> connection;
         std::unordered_set<std::string> objects {};
-        Optional<gg::thunk::Thunk> executing_thunk {};
+        std::vector<Optional<gg::thunk::Thunk>> executing_thunks;
         ProtobufStreamParser<simpledb::proto::KVResponse> parser {};
 
-        Worker(const size_t id, std::shared_ptr<TCPConnection> && connection)
-            : id(id), connection(std::move(connection)) {}
+        Worker(const size_t id, const size_t num_pipeline,
+                        std::shared_ptr<TCPConnection> && connection)
+            : id(id), num_pipeline(num_pipeline),
+            connection(std::move(connection)), executing_thunks(num_pipeline) {}
     };
 
     enum class SelectionStrategy

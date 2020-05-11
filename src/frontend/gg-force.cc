@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <vector>
+#include <chrono>
 #include <thread>
 #include <tuple>
 #include <cstdlib>
@@ -35,6 +36,7 @@
 #include "util/tokenize.hh"
 
 using namespace std;
+using namespace std::chrono;
 using namespace gg::thunk;
 
 constexpr char FORCE_NO_STATUS[] = "GG_FORCE_NO_STATUS";
@@ -357,7 +359,13 @@ int main( int argc, char * argv[] )
                         timeout_multiplier, status_bar };
 
     reductor.upload_dependencies();
+
+    auto before = duration_cast<milliseconds>(system_clock::now().time_since_epoch());
+    cerr << "\u2192 Executing... ";
     vector<string> reduced_hashes = reductor.reduce();
+    auto after = duration_cast<milliseconds>(system_clock::now().time_since_epoch());
+    cerr << "done (" << (after - before).count() << " ms)." << endl;
+
     if ( not no_download ) {
       reductor.download_targets( reduced_hashes );
 

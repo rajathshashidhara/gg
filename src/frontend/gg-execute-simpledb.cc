@@ -200,13 +200,15 @@ void fetch_dependencies(const Thunk& thunk)
         const auto target_path = gg::paths::blob( item.first );
         const auto source_path = roost::path(__gg_exec_dir) / item.first;
 
-        cerr << "[FETCH] target=" << target_path.string() << " source=" << source_path.string() << endl;
+        // cerr << "[FETCH] target=" << target_path.string() << " source=" << source_path.string() << endl;
 
         if (roost::exists(target_path)) {
           roost::remove(target_path);
         }
 
+        // roost::move_file(source_path, target_path);
         roost::copy_then_rename(source_path, target_path, true, 0544);
+        // roost::remove(source_path);
       };
 
     for_each( thunk.values().cbegin(), thunk.values().cend(),
@@ -225,7 +227,7 @@ void upload_output(ExecResponse& _response, const vector<string> & output_hashes
   auto *f_output = _response.mutable_f_output();
   for (const string& output_hash : output_hashes)
   {
-    cerr << "[UPLOAD-F] Key=" << output_hash << " Path=" << gg::paths::blob(output_hash).string() << endl;
+    // cerr << "[UPLOAD-F] Key=" << output_hash << " Path=" << gg::paths::blob(output_hash).string() << endl;
     auto request = f_output->Add();
     request->set_key(output_hash);
     request->set_val(gg::paths::blob(output_hash).string());
@@ -324,7 +326,7 @@ int gg_execute_main( int argc, char * argv[], ExecResponse& _response)
 
     timelog.reset();
 
-    cerr << "Thunk= " << thunk_hash << endl;
+    // cerr << "Thunk= " << thunk_hash << endl;
     // /* take out an advisory lock on the thunk, in case
     //     other gg-execute processes are running at the same time */
     // const string thunk_path = gg::paths::blob( thunk_hash ).string();
@@ -402,7 +404,7 @@ int gg_execute_main( int argc, char * argv[], ExecResponse& _response)
     ret = to_underlying( JobStatus::OperationalFailure );
   }
 
-  cerr << "Return code=" << ret << endl;
+  // cerr << "Return code=" << ret << endl;
   execution_response.set_return_code(ret);
   execution_response.set_stdout(_stdoutstream.str());
 

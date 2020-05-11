@@ -90,15 +90,15 @@ void SimpleDB::upload_files(
                 barrier.fetch_add(-1);
                 while (barrier != 0) { this_thread::yield(); }
 
-                if (index == 0)
-                {
-                    std::cerr << "Upload=" << upload_requests.size();
-                    for (size_t tidx = 0; tidx < bucket_count; tidx++)
-                    {
-                        std::cerr << " bIdx" << tidx << "=" << buckets[tidx].size();
-                    }
-                    std::cerr << std::endl;
-                }
+                // if (index == 0)
+                // {
+                //     std::cerr << "Upload=" << upload_requests.size();
+                //     for (size_t tidx = 0; tidx < bucket_count; tidx++)
+                //     {
+                //         std::cerr << " bIdx" << tidx << "=" << buckets[tidx].size();
+                //     }
+                //     std::cerr << std::endl;
+                // }
 
                 size_t proc_idx = bucket_count;
                 size_t non_empty = 0;
@@ -115,7 +115,7 @@ void SimpleDB::upload_files(
                     non_empty++;
                 }
 
-                std::cerr << "tIdx"<< index <<"=" << proc_idx << std::endl;
+                // std::cerr << "tIdx"<< index <<"=" << proc_idx << std::endl;
                 if (proc_idx == bucket_count)
                     return;
 
@@ -232,15 +232,15 @@ void SimpleDB::download_files(
                 barrier.fetch_add(-1);
                 while (barrier != 0) { this_thread::yield(); }
 
-                if (index == 0)
-                {
-                    std::cerr << "Download=" << download_requests.size();
-                    for (size_t tidx = 0; tidx < bucket_count; tidx++)
-                    {
-                        std::cerr << " bIdx" << tidx << "=" << buckets[tidx].size();
-                    }
-                    std::cerr << std::endl;
-                }
+                // if (index == 0)
+                // {
+                //     std::cerr << "Download=" << download_requests.size();
+                //     for (size_t tidx = 0; tidx < bucket_count; tidx++)
+                //     {
+                //         std::cerr << " bIdx" << tidx << "=" << buckets[tidx].size();
+                //     }
+                //     std::cerr << std::endl;
+                // }
 
                 size_t proc_idx = bucket_count;
                 size_t non_empty = 0;
@@ -257,7 +257,7 @@ void SimpleDB::download_files(
                     non_empty++;
                 }
 
-                std::cerr << "tIdx"<< index <<"=" << proc_idx << std::endl;
+                // std::cerr << "tIdx"<< index <<"=" << proc_idx << std::endl;
                 if (proc_idx == bucket_count)
                     return;
 
