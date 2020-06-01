@@ -156,8 +156,6 @@ unique_ptr<ExecutionEngine> make_execution_engine( const EngineInfo & engine )
 
       workers.emplace_back(host_ip, port);
     }
-    if (workers.size() != max_jobs)
-      throw runtime_error("baseline: incorrect args");
 
     return make_unique<SimpleDBExecutionEngine>( max_jobs, workers );
   }

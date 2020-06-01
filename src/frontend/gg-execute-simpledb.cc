@@ -208,7 +208,7 @@ void fetch_dependencies(const Thunk& thunk)
 
         // roost::move_file(source_path, target_path);
         roost::copy_then_rename(source_path, target_path, true, 0544);
-        // roost::remove(source_path);
+        roost::remove(source_path);
       };
 
     for_each( thunk.values().cbegin(), thunk.values().cend(),
@@ -224,13 +224,21 @@ void fetch_dependencies(const Thunk& thunk)
 
 void upload_output(ExecResponse& _response, const vector<string> & output_hashes)
 {
+  static const char * __gg_exec_dir = getenv( "GG_EXEC_DIR" );
+
   auto *f_output = _response.mutable_f_output();
   for (const string& output_hash : output_hashes)
   {
     // cerr << "[UPLOAD-F] Key=" << output_hash << " Path=" << gg::paths::blob(output_hash).string() << endl;
+
+    const auto source_path = gg::paths::blob(output_hash);
+    const auto target_path = roost::path(__gg_exec_dir) / output_hash;
+
+    roost::move_file(source_path, target_path);
+
     auto request = f_output->Add();
     request->set_key(output_hash);
-    request->set_val(gg::paths::blob(output_hash).string());
+    request->set_val(target_path.string());
     request->set_immutable(false); // TODO: figure this out!
     request->set_executable(true); // TODO: figure this out!
   }

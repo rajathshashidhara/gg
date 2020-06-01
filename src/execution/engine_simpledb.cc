@@ -75,13 +75,12 @@ void SimpleDBExecutionEngine::init(ExecutionLoop& loop)
                             success_callback_(executed_thunk.thunk_hash(), move(thunk_outputs), 0);
                         }
 
-                        break;
+                        workers_.at(idx).scheduled_jobs_--;
+                        running_jobs_--;
                     }
 
-                    workers_.at(idx).scheduled_jobs_--;
                     workers_.at(idx).state = State::Idle;
                     free_workers_.insert(idx);
-                    running_jobs_--;
 
                     return true;
                 },
@@ -279,6 +278,7 @@ void SimpleDBExecutionEngine::force_thunk(const Thunk& thunk, ExecutionLoop & lo
         free_workers_.erase(worker_idx);
     }
 
+    request.set_id(slot);
     string s_request_(sizeof(size_t), 0);
     *((size_t*) &s_request_[0]) = request.ByteSize();
     s_request_.append(request.SerializeAsString());
