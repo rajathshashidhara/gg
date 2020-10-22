@@ -244,6 +244,10 @@ vector<string> Reductor::reduce()
                EXECUTING } exec_state = CANNOT_BE_EXECUTED;
 
         for ( auto & exec_engine : exec_engines_ ) {
+          if ( exec_engine->is_remote() && thunk.is_localonly() ) {
+            continue;
+          }
+
           if ( exec_engine->can_execute( thunk ) ) {
             if ( exec_engine->job_count() >= exec_engine->max_jobs() ) {
               exec_state = FULL_CAPACITY;
@@ -259,6 +263,10 @@ vector<string> Reductor::reduce()
         /* the job cannot be executed on any of the execution engines */
         if ( exec_state == CANNOT_BE_EXECUTED ) {
           for ( auto & fallback_engine : fallback_engines_ ) {
+            if ( fallback_engine->is_remote() && thunk.is_localonly() ) {
+              continue;
+            }
+
             if ( fallback_engine->can_execute( thunk ) ) {
               if ( fallback_engine->job_count() >= fallback_engine->max_jobs() ) {
                 exec_state = FULL_FALLBACK_CAPACITY;

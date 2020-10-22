@@ -48,6 +48,7 @@ int main( int argc, char * argv[] )
       { "output",      required_argument, nullptr, 'o' },
       { "placeholder", required_argument, nullptr, 'C' },
       { "timeout",     required_argument, nullptr, 'T' },
+      { "local",       no_argument,       nullptr, 'l'},
       { nullptr, 0, nullptr, 0 }
     };
 
@@ -60,9 +61,10 @@ int main( int argc, char * argv[] )
     vector<Thunk::DataItem> executables;
     vector<string> outputs;
     milliseconds timeout = 0s;
+    bool local = false;
 
     while ( true ) {
-      const int opt = getopt_long( argc, argv, "E:v:t:e:o:C:T:", cmd_options, nullptr );
+      const int opt = getopt_long( argc, argv, "E:v:t:e:o:C:T:l:", cmd_options, nullptr );
 
       if ( opt == -1 ) { break; }
 
@@ -95,6 +97,10 @@ int main( int argc, char * argv[] )
         timeout = milliseconds { stoul( optarg ) };
         break;
 
+      case 'l':
+        local = true;
+        break;
+
       default:
         throw runtime_error( "invalid option" );
       }
@@ -118,6 +124,7 @@ int main( int argc, char * argv[] )
                   move( executables ), move( outputs ) };
 
     thunk.set_timeout( timeout );
+    thunk.set_localonly( local );
 
     string thunk_hash = ThunkWriter::write( thunk );
 

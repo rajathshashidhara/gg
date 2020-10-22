@@ -145,7 +145,8 @@ Thunk::Thunk( const gg::protobuf::Thunk & thunk_proto )
     thunks_(),
     executables_(),
     outputs_( thunk_proto.outputs().cbegin(), thunk_proto.outputs().cend() ),
-    timeout_( thunk_proto.timeout() )
+    timeout_( thunk_proto.timeout() ),
+    localonly_( thunk_proto.localonly() )
 {
   for ( const string & item : thunk_proto.values() ) {
     values_.emplace( string_to_data( item ) );
@@ -272,6 +273,7 @@ protobuf::Thunk Thunk::to_protobuf() const
   for ( const string & output : outputs_ ) { thunk_proto.add_outputs( output ); }
 
   thunk_proto.set_timeout( timeout_.count() );
+  thunk_proto.set_localonly( localonly_ );
 
   return thunk_proto;
 }

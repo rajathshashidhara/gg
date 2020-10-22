@@ -15,4 +15,5 @@ message Thunk {
   repeated string executables = 4;
   repeated string outputs = 5;
   uint32 timeout = 6;
+  bool localonly = 7;
 }

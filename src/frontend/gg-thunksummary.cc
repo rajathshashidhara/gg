@@ -46,15 +46,18 @@ struct ThunkStats
   }
 };
 
-ThunkStats print_thunk_info( const string & hash, unsigned int indent )
+ThunkStats print_thunk_info( const string & hash, unsigned int indent, unsigned int* max_depth)
 {
   const Thunk thunk { move( ThunkReader::read( gg::paths::blob( hash ) ) ) };
   const string indentation( indent, ' ' );
 
   const string display_name = shortn( hash );
 
+  unsigned int depth;
   ThunkStats stats;
   stats.thunks.insert( hash );
+
+  *max_depth = indent;
 
   cout << indentation << display_name << "\n";
 
@@ -66,20 +69,24 @@ ThunkStats print_thunk_info( const string & hash, unsigned int indent )
 
   for ( const auto & item : thunk.thunks() ) {
     const string infile_name = shortn( item.first );
-    stats += print_thunk_info( item.first, indent + 1 );
+    stats += print_thunk_info( item.first, indent + 1, &depth);
+
+    *max_depth = std::max(*max_depth, depth);
   }
 
   const string plural = stats.thunks.size() > 1 ? "s" : "";
 
   cout << indentation << display_name << " uses " << stats.thunks.size()
        << " thunk" << plural << " and " << stats.files.size() << " files totaling "
-       << stats.total_file_size() / 1048576 << " MiB\n";
+       << stats.total_file_size() / 1048576 << " MiB\n" << " and has " << ((*max_depth - indent) + 1) << " depth";
 
   return stats;
 }
 
 int main( int argc, char * argv[] )
 {
+  unsigned int depth;
+
   try {
     if ( argc <= 0 ) {
       abort();
@@ -90,7 +97,7 @@ int main( int argc, char * argv[] )
       return EXIT_FAILURE;
     }
 
-    print_thunk_info( argv[ 1 ], 0 );
+    print_thunk_info( argv[ 1 ], 0, &depth);
   }
   catch ( const exception &  e ) {
     print_exception( argv[ 0 ], e );

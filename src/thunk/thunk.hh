@@ -101,6 +101,7 @@ namespace gg {
       DataList executables_;
       std::vector<std::string> outputs_;
       std::chrono::milliseconds timeout_ { 0 };
+      bool localonly_ { false };
 
       mutable Optional<std::string> hash_ {};
 
@@ -143,6 +144,7 @@ namespace gg {
       const std::chrono::milliseconds & timeout() const { return timeout_; }
 
       void set_timeout( const std::chrono::milliseconds & timeout );
+      void set_localonly( bool is_localonly ) { localonly_ = is_localonly; }
 
       gg::protobuf::Thunk to_protobuf() const;
 
@@ -154,6 +156,7 @@ namespace gg {
       std::string executable_hash() const;
       std::string output_hash( const std::string & tag ) const;
 
+      bool is_localonly() const { return localonly_; }
       bool can_be_executed() const { return ( thunks_.size() == 0 ); }
       size_t infiles_size( const bool include_executables = true ) const;
 
