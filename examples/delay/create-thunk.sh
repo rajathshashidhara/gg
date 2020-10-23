@@ -10,9 +10,11 @@ THUNK_PATH=${4?$USAGE}
 DELAY_HASH=$(gg-hash $DELAY_PATH)
 
 gg-create-thunk --local \
+                --envar GG_DIR=${GG_DIR} \
+                --envar GG_MODELPATH=${GG_MODELPATH} \
                 --executable ${DELAY_HASH} \
                 --output out \
                 --placeholder delay${T}_${NAME} \
-                ${DELAY_HASH} ${T} ${THUNK_PATH}
+                ${DELAY_HASH} delay ${T} ${THUNK_PATH}
 
 gg-collect $DELAY_PATH

@@ -16,9 +16,10 @@ void LocalExecutionEngine::force_thunk( const Thunk & thunk,
                                         ExecutionLoop & exec_loop )
 {
   exec_loop.add_child_process( thunk.hash(),
-    [this, outputs=thunk.outputs()] ( const uint64_t, const string & hash, const int )
+    [this, is_localonly=thunk.is_localonly(), outputs=thunk.outputs()] ( const uint64_t, const string & hash, const int )
     {
-      running_jobs_--; /* XXX not thread-safe */
+      if (!is_localonly)
+        running_jobs_--; /* XXX not thread-safe */
 
       vector<ThunkOutput> thunk_outputs;
 
@@ -51,7 +52,8 @@ void LocalExecutionEngine::force_thunk( const Thunk & thunk,
     true
   );
 
-  running_jobs_++;
+  if (!thunk.is_localonly())
+    running_jobs_++;
 }
 
 size_t LocalExecutionEngine::job_count() const

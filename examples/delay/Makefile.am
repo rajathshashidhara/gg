@@ -13,10 +13,10 @@ BASE_LDADD = ../../src/thunk/libthunk.a \
 
 bin_PROGRAMS = delay
 
-workload_SOURCES = delay.cc
-workload_LDADD = $(BASE_LDADD)
-workload_LDFLAGS = -s
+delay_SOURCES = delay.cc
+delay_LDADD = $(BASE_LDADD)
+delay_LDFLAGS = -s
 
 if BUILD_STATIC_BINS
-  workload_LDFLAGS += -static
+  delay_LDFLAGS += -static
 endif

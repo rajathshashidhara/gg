@@ -78,7 +78,7 @@ ThunkStats print_thunk_info( const string & hash, unsigned int indent, unsigned 
 
   cout << indentation << display_name << " uses " << stats.thunks.size()
        << " thunk" << plural << " and " << stats.files.size() << " files totaling "
-       << stats.total_file_size() / 1048576 << " MiB\n" << " and has " << ((*max_depth - indent) + 1) << " depth";
+       << stats.total_file_size() / 1048576 << " MiB" << " and has " << ((*max_depth - indent) + 1) << " depth\n";
 
   return stats;
 }
