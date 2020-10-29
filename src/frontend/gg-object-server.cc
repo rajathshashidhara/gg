@@ -19,7 +19,7 @@ string get_canned_response( const int status, const HTTPRequest & request )
   const static map<int, string> status_messages = {
     { 400, "Bad Request" },
     { 404, "Not Found" },
-    { 405, "Mehtod Not Allowed" },
+    { 405, "Method Not Allowed" },
   };
 
   HTTPResponse response;
@@ -82,35 +82,75 @@ int main( int argc, char * argv[] )
                 continue;
               }
 
-              if ( first_line.substr( 0, first_space ) != "GET" ) {
-                /* only GET requests are supported */
+              if ( first_line.substr( 0, first_space ) == "GET" ) {
+                const string requested_object = first_line.substr( first_space + 2,
+                                                                  last_space - first_space - 2 );
+
+                const roost::path object_path = gg::paths::blob( requested_object );
+                if ( not roost::exists( object_path ) or
+                    roost::is_directory( object_path ) or
+                    requested_object.find( '/' ) != string::npos ) {
+                  connection->enqueue_write( get_canned_response( 404, request ) );
+                  continue;
+                }
+
+                const string payload = roost::read_file( object_path );
+                HTTPResponse response;
+                response.set_request( request );
+                response.set_first_line( "HTTP/1.1 200 OK" );
+                response.add_header( HTTPHeader{ "Content-Length", to_string( payload.size() ) } );
+                response.add_header( HTTPHeader{ "Content-Type", "application/octet-stream" } );
+                response.done_with_headers();
+                response.read_in_body( payload );
+                assert( response.state() == COMPLETE );
+
+                connection->enqueue_write( response.str() );
+                cerr << "served " << requested_object << endl;
+              } else if (first_line.substr( 0, first_space ) == "POST" ) {
+                const string requested_object = first_line.substr( first_space + 2,
+                                                                  last_space - first_space - 2 );
+
+                const roost::path object_path = gg::paths::blob( requested_object );
+                cerr << object_path.string() << endl;
+                if ( requested_object.find('/') != string::npos ) {
+                  connection->enqueue_write( get_canned_response( 400, request ) );
+                  continue;
+                }
+
+                if ( roost::exists( object_path ) and roost::is_directory( object_path )) {
+                  cerr << "path: " << requested_object << " is a directory." << endl;
+                  connection->enqueue_write( get_canned_response( 400, request ) );
+                  continue;
+                }
+
+                if ( roost::exists( object_path ) and
+                    (size_t) roost::file_size( object_path ) != request.body().size()) {
+                  cerr << "file: " << requested_object << " already exists with size: " << roost::file_size( object_path )
+                      << " request_body_size: " << request.body().size() << endl;
+                  connection->enqueue_write( get_canned_response( 400, request ) );
+                  continue;
+                }
+
+                /* assuming we only upload thunks here! */
+                roost::atomic_create(request.body(), object_path, true, 0500);
+
+                HTTPResponse response;
+                const string payload = "";
+                response.set_request( request );
+                response.set_first_line( "HTTP/1.1 200 OK" );
+                response.add_header( HTTPHeader{ "Content-Length", to_string( payload.size() ) } );
+                response.add_header( HTTPHeader{ "Content-Type", "application/octet-stream" } );
+                response.done_with_headers();
+                response.read_in_body( payload );
+                assert( response.state() == COMPLETE );
+
+                connection->enqueue_write( response.str() );
+                cerr << "served " << requested_object << endl;
+              } else {
+                /* only GET/PUT requests are supported */
                 connection->enqueue_write( get_canned_response( 405, request ) );
                 continue;
               }
-
-              const string requested_object = first_line.substr( first_space + 2,
-                                                                 last_space - first_space - 2 );
-
-              const roost::path object_path = gg::paths::blob( requested_object );
-              if ( not roost::exists( object_path ) or
-                   roost::is_directory( object_path ) or
-                   requested_object.find( '/' ) != string::npos ) {
-                connection->enqueue_write( get_canned_response( 404, request ) );
-                continue;
-              }
-
-              const string payload = roost::read_file( object_path );
-              HTTPResponse response;
-              response.set_request( request );
-              response.set_first_line( "HTTP/1.1 200 OK" );
-              response.add_header( HTTPHeader{ "Content-Length", to_string( payload.size() ) } );
-              response.add_header( HTTPHeader{ "Content-Type", "application/octet-stream" } );
-              response.done_with_headers();
-              response.read_in_body( payload );
-              assert( response.state() == COMPLETE );
-
-              connection->enqueue_write( response.str() );
-              cerr << "served " << requested_object << endl;
             }
 
             return true;

@@ -11,6 +11,7 @@
 #include "storage/backend_gs.hh"
 #include "storage/backend_redis.hh"
 #include "storage/backend_simpledb.hh"
+#include "storage/backend_gg.hh"
 #include "thunk/ggutils.hh"
 #include "util/digest.hh"
 #include "util/optional.hh"
@@ -87,6 +88,12 @@ unique_ptr<StorageBackend> StorageBackend::create_backend( const string & uri )
     }
 
     backend = make_unique<SimpleDBStorageBackend>(config);
+  }
+  else if (endpoint.protocol == "gg") {
+    uint16_t port = 8080;
+    GGObjectStoreConfig config( endpoint.host, endpoint.port.get_or( port ) );
+
+    backend = make_unique<GGStorageBackend>(config);
   }
   else {
     throw runtime_error( "unknown storage backend" );

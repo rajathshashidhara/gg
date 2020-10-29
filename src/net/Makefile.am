@@ -22,4 +22,5 @@ libggnet_a_SOURCES = address.cc address.hh body_parser.hh \
                      lambda.hh lambda.cc \
                      redis.hh redis.cc \
                      simpledb.hh simpledb.cc \
+                     gg_objectstore.hh gg_objectstore.cc \
                      gcloud.hh gcloud.cc
