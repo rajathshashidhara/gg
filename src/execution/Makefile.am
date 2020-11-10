@@ -18,4 +18,6 @@ libggexecution_a_SOURCES = response.hh response.cc \
                            meow/message.hh meow/message.cc \
                            meow/util.hh meow/util.cc \
                            engine_meow.hh engine_meow.cc \
-                           reductor.hh reductor.cc
+                           reductor.hh reductor.cc \
+                           tracker.hh tracker.cc  \
+                           scheduler.hh scheduler.cc

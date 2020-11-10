@@ -45,7 +45,7 @@ void BaselineExecutionEngine::force_thunk(const Thunk& thunk,
 
     worker_state_[worker] = State::Busy;
     uint64_t connection_id =
-    exec_loop.make_protobuf_request<TCPConnection, 
+    exec_loop.make_protobuf_request<TCPConnection,
                                     gg::protobuf::ExecutionRequest,
                                     gg::protobuf::ExecutionResponse>(
         thunk.hash(), address_[worker], request,

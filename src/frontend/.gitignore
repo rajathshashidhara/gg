@@ -6,6 +6,7 @@ gg-describe
 gg-force-and-run
 gg-mock
 gg-force
+gg-force-interactive
 gg-execute
 gg-execute-static
 gg-execute-simpledb-static

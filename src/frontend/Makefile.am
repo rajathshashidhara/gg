@@ -16,7 +16,7 @@ GG_LDADD = ../execution/libggexecution.a \
 
 BASE_LDADD = $(GG_LDADD) $(PROTOBUF_LIBS) $(HIREDIS_LIBS)
 
-bin_PROGRAMS = gg gg-trace gg-describe gg-force-and-run gg-force gg-mock \
+bin_PROGRAMS = gg gg-trace gg-describe gg-force-and-run gg-force gg-force-interactive gg-mock \
                gg-execute gg-infer gg-thunksummary gg-s3-upload \
                gg-s3-download gg-init gg-hash gg-create-thunk gg-collect \
                gg-put gg-get gg-execute-server gg-meow-worker gg-object-server \
@@ -52,6 +52,9 @@ gg_execute_static_LDFLAGS = -static -s -Wl,--whole-archive -lpthread -Wl,--no-wh
 
 gg_force_SOURCES = gg-force.cc
 gg_force_LDADD = $(BASE_LDADD) $(CRYPTO_LIBS) $(SSL_LIBS)
+
+gg_force_interactive_SOURCES = gg-force-interactive.cc
+gg_force_interactive_LDADD = $(BASE_LDADD) $(CRYPTO_LIBS) $(SSL_LIBS)
 
 gg_mock_SOURCES = gg-mock.cc
 gg_mock_LDADD = $(BASE_LDADD) $(CRYPTO_LIBS)

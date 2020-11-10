@@ -72,7 +72,7 @@ void Reductor::print_status() const
   }
 }
 
-void print_gg_message( const string & tag, const string & message )
+static void print_gg_message( const string & tag, const string & message )
 {
   cerr << "[" << tag << "] " << message << endl;
 }
