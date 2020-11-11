@@ -49,7 +49,7 @@ public:
   bool is_finished() const { return ( remaining_targets_.size() == 0 ); }
 
   /* Get reduction result */
-  std::vector<std::string> reduce();
+  std::string reduce();
 
   /* Get status */
   void print_status() const;

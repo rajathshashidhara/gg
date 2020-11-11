@@ -175,6 +175,9 @@ int main( int argc, char * argv[] )
       cerr << "done (" << upload_time.count() << " ms)." << endl;
     }
 
+    int targets_left = target_hashes.size();
+    unordered_map<string, string> reduction_result;
+
     ExecutionLoop loop;
     for (auto & thunk_hash : target_hashes) {
       HTTPRequest request;
@@ -187,9 +190,15 @@ int main( int argc, char * argv[] )
 
       loop.make_http_request<TCPConnection>( thunk_hash,
         sched_addr, request,
-        []( const uint64_t, const string & thunk_hash,
+        [&storage_backend, &targets_left, &reduction_result]( const uint64_t, const string & thunk_hash,
              const HTTPResponse & http_response ) -> bool {
+          const string final_hash = http_response.body();
           cerr << "Completed: " << thunk_hash << " Code: " << http_response.status_code() << endl;
+          cerr << "Final hash: " << final_hash << endl;
+
+          reduction_result[thunk_hash] = final_hash;
+          targets_left--;
+
           return true;
         },
         [] ( const uint64_t, const string & thunk_hash )
@@ -199,7 +208,42 @@ int main( int argc, char * argv[] )
     }
 
     while (true) {
+      if (!targets_left)
+        break;
+
       loop.loop_once(-1);
+    }
+
+    vector<storage::GetRequest> download_requests;
+    total_size = 0;
+
+    for (auto & it : reduction_result ) {
+      const string& hash = it.first;
+      if ( not roost::exists( gg::paths::blob( hash ) ) ) {
+        download_requests.push_back( { hash, gg::paths::blob( hash ) } );
+        total_size += gg::hash::size( hash );
+      }
+    }
+
+    if ( download_requests.size() > 0 ) {
+      const string plural = download_requests.size() == 1 ? "" : "s";
+      cerr << "\u2198 Downloading output file" << plural
+          << " (" << format_bytes( total_size ) << ")... ";
+      auto download_time = time_it<milliseconds>(
+        [&download_requests, &storage_backend]()
+        {
+          storage_backend->get( download_requests );
+        }
+      );
+
+      cerr << "done (" << download_time.count() << " ms)." << endl;
+    }
+
+    for (size_t i = 0; i < target_hashes.size(); i++) {
+      roost::copy_then_rename( gg::paths::blob(reduction_result[target_hashes[i]]), target_filenames[i]);
+
+      /* HACK this is a just a dirty hack... it's not always right */
+      roost::make_executable( target_filenames[ i ] );
     }
 
     return EXIT_SUCCESS;

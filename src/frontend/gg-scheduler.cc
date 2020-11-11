@@ -419,13 +419,13 @@ int main( int argc, char * argv[] )
         auto connection = dag->get_connection();
 
         HTTPResponse response;
-        const string payload = "";
+        const string final_hash = dag->reduce();
         response.set_request( dag->get_request() );
         response.set_first_line( "HTTP/1.1 200 OK" );
-        response.add_header( HTTPHeader{ "Content-Length", 0 } );
-        response.add_header( HTTPHeader{ "Content-Type", "application/octet-stream" } );
+        response.add_header( HTTPHeader{ "Content-Length", to_string(final_hash.length())} );
+        response.add_header( HTTPHeader{ "Content-Type", "text/plain" } );
         response.done_with_headers();
-        response.read_in_body( payload );
+        response.read_in_body( final_hash );
         assert( response.state() == COMPLETE );
 
         connection->enqueue_write(response.str());

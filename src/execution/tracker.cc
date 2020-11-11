@@ -82,21 +82,19 @@ string Tracker::next()
   return job;
 }
 
-vector<string> Tracker::reduce()
+string Tracker::reduce()
 {
   if (not is_finished())
   {
     throw runtime_error( "unhandled poller failure happened, job is not finished" );
   }
 
-  vector<string> final_hashes;
 
   const string final_hash = dep_graph_.updated_hash( target_hash_ );
   const Optional<ReductionResult> answer = gg::cache::check( final_hash );
   if ( not answer.initialized() ) {
     throw runtime_error( "internal error: final answer not found for " + target_hash_ );
   }
-  final_hashes.emplace_back( answer->hash );
 
-  return final_hashes;
+  return answer->hash;
 }
