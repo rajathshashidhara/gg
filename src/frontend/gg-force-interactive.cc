@@ -379,7 +379,7 @@ int main( int argc, char * argv[] )
 
       auto finished_dags = scheduler.run_once();
       for (auto & dag : finished_dags) {
-        dag.print_status();
+        dag->print_status();
       }
     }
 

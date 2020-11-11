@@ -18,8 +18,8 @@ class Scheduler;
 class Tracker
 {
 private:
-  const std::vector<std::string> target_hashes_;
-  std::unordered_set<std::string> remaining_targets_;
+  const std::string target_hash_;
+  std::unordered_set<std::string> remaining_targets_ {};
   ExecutionGraph dep_graph_ {};
 
   std::deque<std::string> job_queue_ {};
@@ -33,7 +33,10 @@ private:
 
   friend class Scheduler;
 public:
-  Tracker( const std::vector<std::string> & target_hashes );
+  Tracker( const std::string & target_hashes );
+
+  /* Target hash */
+  std::string target_hash() const { return target_hash_; }
 
   /* Outputs next job */
   std::string next();

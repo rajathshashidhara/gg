@@ -32,18 +32,18 @@ private:
 
   struct JobInfo
   {
-    Tracker& tracker_;
+    std::shared_ptr<Tracker> tracker_;
     Clock::time_point start;
     std::chrono::milliseconds timeout { 0 };
     uint8_t restarts { std::numeric_limits<uint8_t>::max() };
 
-    JobInfo(Tracker& tracker): tracker_ ( tracker ), start () {}
+    JobInfo(std::shared_ptr<Tracker>& tracker): tracker_ ( tracker ), start () {}
   };
 
   bool status_bar_;
 
-  std::list<Tracker> pending_dags_ {};
-  std::list<std::pair<std::string, Tracker&>> job_queue_ {};
+  std::list<std::shared_ptr<Tracker>> pending_dags_ {};
+  std::list<std::pair<std::string, std::shared_ptr<Tracker>>> job_queue_ {};
   std::unordered_map<std::string, JobInfo> running_jobs_ {};
   size_t finished_jobs_ { 0 };
   float estimated_cost_ { 0.0 };
@@ -67,7 +67,7 @@ private:
                            std::vector<gg::ThunkOutput> && outputs,
                            const float cost = 0.0 );
 
-  Optional<std::pair<std::list<std::pair<std::string, Tracker&>>::iterator, std::unique_ptr<ExecutionEngine>&>> pick_job();
+  Optional<std::pair<std::list<std::pair<std::string, std::shared_ptr<Tracker>>>::iterator, std::unique_ptr<ExecutionEngine>&>> pick_job();
 
 public:
   Scheduler( std::vector<std::unique_ptr<ExecutionEngine>> && execution_engines,
@@ -80,7 +80,7 @@ public:
              const PlacementHeuristic heuristic = PlacementHeuristic::First);
 
   void add_dag( const std::vector<std::string> & target_hashes );
-  std::vector<Tracker> run_once();  /* Run this function repeatedly */
+  std::vector<std::shared_ptr<Tracker>> run_once();  /* Run this function repeatedly */
   void print_status() const;
 
 };

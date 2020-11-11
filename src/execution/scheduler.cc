@@ -32,7 +32,7 @@ size_t Scheduler::remaining_jobs() const
 
   for (auto & tracker : pending_dags_)
   {
-    jobs += tracker.dep_graph_.size();
+    jobs += tracker->dep_graph_.size();
   }
 
   return jobs;
@@ -144,8 +144,8 @@ Scheduler::Scheduler( std::vector<std::unique_ptr<ExecutionEngine>> && execution
       if (it == running_jobs_.end())
         throw runtime_error( "inconsistent state" );
 
-      Tracker& tracker = it->second.tracker_;
-      tracker.job_queue_.push_front(old_hash);
+      std::shared_ptr<Tracker> tracker = it->second.tracker_;
+      tracker->job_queue_.push_front(old_hash);
     };
 
   if ( exec_engines_.size() == 0 ) {
@@ -173,34 +173,39 @@ void Scheduler::finalize_execution( const string & old_hash,
   if (it == running_jobs_.end())
     throw runtime_error( "inconsistent state" );
 
-  Tracker& tracker = it->second.tracker_;
-  tracker.finalize_execution(old_hash, move(outputs), cost);
+  std::shared_ptr<Tracker> tracker = it->second.tracker_;
+  tracker->finalize_execution(old_hash, move(outputs), cost);
 
   running_jobs_.erase(old_hash);
 }
 
 void Scheduler::add_dag( const std::vector<std::string> & target_hashes )
 {
-  pending_dags_.emplace_back(target_hashes);
+  for (auto & hash : target_hashes)
+  {
+    shared_ptr<Tracker> dag = make_shared<Tracker>(hash);
+    pending_dags_.push_back(dag);
+  }
 }
 
-vector<Tracker> Scheduler::run_once()
+vector<shared_ptr<Tracker>> Scheduler::run_once()
 {
-  vector<Tracker> finished_dags;
+  vector<shared_ptr<Tracker>> finished_dags;
   for (auto it = pending_dags_.begin(); it != pending_dags_.end();)
   {
-    if (it->is_finished()) {
-      finished_dags.push_back(*it);
+    shared_ptr<Tracker> dag = *it;
+    if (dag->is_finished()) {
+      finished_dags.push_back(dag);
 
       it = pending_dags_.erase(it);
     } else {
       while (true) {
-        string hash = it->next();
+        string hash = dag->next();
 
         if (hash.empty())
           break;
 
-        job_queue_.emplace_back(hash, *it);
+        job_queue_.emplace_back(hash, dag);
       }
 
       it++;
@@ -252,7 +257,7 @@ vector<Tracker> Scheduler::run_once()
 
   auto schedule_info = result.get();
   string thunk_hash = schedule_info.first->first;
-  Tracker& dag = schedule_info.first->second;
+  std::shared_ptr<Tracker> dag = schedule_info.first->second;
   job_queue_.erase(schedule_info.first);
 
   /* don't bother executing gg-execute if it's in the cache */
@@ -287,7 +292,7 @@ vector<Tracker> Scheduler::run_once()
     finalize_execution( thunk_hash, move( new_outputs ), 0 );
   }
   else {
-    const Thunk & thunk = dag.dep_graph_.get_thunk( thunk_hash );
+    const Thunk & thunk = dag->dep_graph_.get_thunk( thunk_hash );
     std::unique_ptr<ExecutionEngine> &engine = schedule_info.second;
     engine->force_thunk( thunk, exec_loop_ );
 
@@ -303,7 +308,7 @@ vector<Tracker> Scheduler::run_once()
         job_info.timeout = default_timeout_;
       }
 
-      running_jobs_.insert( make_pair(thunk_hash, job_info ) );
+      running_jobs_.insert( make_pair(thunk_hash, move(job_info) ) );
     } else {
       JobInfo & job_info = it->second;
 
@@ -320,7 +325,7 @@ vector<Tracker> Scheduler::run_once()
   return finished_dags;
 }
 
-typedef std::list<std::pair<std::string, Tracker&>>::iterator job_iterator;
+typedef std::list<std::pair<std::string, std::shared_ptr<Tracker>>>::iterator job_iterator;
 
 Optional<pair<job_iterator, std::unique_ptr<ExecutionEngine>&>> Scheduler::pick_job()
 {
@@ -331,7 +336,8 @@ Optional<pair<job_iterator, std::unique_ptr<ExecutionEngine>&>> Scheduler::pick_
   case PlacementHeuristic::First:
     for (auto thunk_it = job_queue_.begin(); thunk_it != job_queue_.end(); thunk_it++)
     {
-      const Thunk& thunk = thunk_it->second.dep_graph_.get_thunk(thunk_it->first);
+      std::shared_ptr<Tracker> dag = thunk_it->second;
+      const Thunk& thunk = dag->dep_graph_.get_thunk(thunk_it->first);
 
       for (auto & exec_engine : exec_engines_)
       {
@@ -351,7 +357,8 @@ Optional<pair<job_iterator, std::unique_ptr<ExecutionEngine>&>> Scheduler::pick_
     /* Try fallback engines! */
     for (auto thunk_it = job_queue_.begin(); thunk_it != job_queue_.end(); thunk_it++)
     {
-      const Thunk& thunk = thunk_it->second.dep_graph_.get_thunk(thunk_it->first);
+      std::shared_ptr<Tracker> dag = thunk_it->second;
+      const Thunk& thunk = dag->dep_graph_.get_thunk(thunk_it->first);
 
       for (auto & exec_engine : fallback_engines_)
       {
