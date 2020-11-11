@@ -192,10 +192,13 @@ int main( int argc, char * argv[] )
         sched_addr, request,
         [&storage_backend, &targets_left, &reduction_result]( const uint64_t, const string & thunk_hash,
              const HTTPResponse & http_response ) -> bool {
-          const string final_hash = http_response.body();
-          cerr << "Completed: " << thunk_hash << " Code: " << http_response.status_code() << endl;
-          cerr << "Final hash: " << final_hash << endl;
 
+          if (http_response.status_code() != "200") {
+            cerr << "Failed to execute: " << thunk_hash << " " << http_response.status_code() <<  endl;
+            abort();
+          }
+
+          const string final_hash = http_response.body();
           reduction_result[thunk_hash] = final_hash;
           targets_left--;
 
@@ -207,18 +210,25 @@ int main( int argc, char * argv[] )
         });
     }
 
-    while (true) {
-      if (!targets_left)
-        break;
+    cerr << "\u2192 Executing... ";
+    auto execution_time = time_it<milliseconds>(
+      [&loop, &targets_left]()
+      {
+        while (true) {
+          if (!targets_left)
+            break;
 
-      loop.loop_once(-1);
-    }
+          loop.loop_once(-1);
+        }
+      }
+    );
+    cerr << "done (" << execution_time.count() << " ms)." << endl;
 
     vector<storage::GetRequest> download_requests;
     total_size = 0;
 
     for (auto & it : reduction_result ) {
-      const string& hash = it.first;
+      const string& hash = it.second;
       if ( not roost::exists( gg::paths::blob( hash ) ) ) {
         download_requests.push_back( { hash, gg::paths::blob( hash ) } );
         total_size += gg::hash::size( hash );
@@ -235,7 +245,6 @@ int main( int argc, char * argv[] )
           storage_backend->get( download_requests );
         }
       );
-
       cerr << "done (" << download_time.count() << " ms)." << endl;
     }
 
