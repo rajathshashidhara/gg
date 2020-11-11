@@ -375,7 +375,18 @@ int main( int argc, char * argv[] )
               HTTPRequest request { move( request_parser->front() ) };
               request_parser->pop();
 
-              const string & thunk_hash = request.first_line();
+              const string & first_line = request.first_line();
+              const string::size_type first_space = first_line.find( ' ' );
+              const string::size_type last_space = first_line.rfind( ' ' );
+
+              if ( first_space == string::npos or last_space == string::npos or first_line.substr( 0, first_space ) != "POST") {
+                /* wrong http request */
+                connection->enqueue_write( get_canned_response( 400, request ) );
+                continue;
+              }
+
+              const string & thunk_hash = first_line.substr( first_space + 2,
+                                                                  last_space - first_space - 2 );
               roost::path thunk_path = gg::paths::blob(thunk_hash);
               if (!ThunkReader::is_thunk(thunk_path)) {
                 /* wrong http request */

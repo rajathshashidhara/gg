@@ -49,6 +49,14 @@ public:
   const gg::thunk::Thunk &
   get_thunk( const std::string & hash ) const { return thunks_.at( hash ); }
 
+  std::vector<std::string>
+  get_thunk_hashes() const {
+    std::vector<std::string> thunk_hashes;
+    for (auto it = thunks_.begin(); it != thunks_.end(); it++)
+      thunk_hashes.push_back(it->first);
+    return thunk_hashes;
+  }
+
   std::string updated_hash( const std::string & original_hash ) const;
   std::string original_hash( const std::string & updated_hash ) const;
   size_t size() const { return thunks_.size(); }

@@ -7,6 +7,7 @@ gg-force-and-run
 gg-mock
 gg-force
 gg-force-interactive
+gg-force-remote
 gg-scheduler
 gg-execute
 gg-execute-static

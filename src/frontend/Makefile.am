@@ -17,7 +17,7 @@ GG_LDADD = ../execution/libggexecution.a \
 BASE_LDADD = $(GG_LDADD) $(PROTOBUF_LIBS) $(HIREDIS_LIBS)
 
 bin_PROGRAMS = gg gg-trace gg-describe gg-force-and-run gg-force gg-force-interactive gg-scheduler gg-mock \
-               gg-execute gg-infer gg-thunksummary gg-s3-upload \
+               gg-force-remote gg-execute gg-infer gg-thunksummary gg-s3-upload \
                gg-s3-download gg-init gg-hash gg-create-thunk gg-collect \
                gg-put gg-get gg-execute-server gg-meow-worker gg-object-server \
                lambda-invoker prune-file splice-lines
@@ -55,6 +55,9 @@ gg_force_LDADD = $(BASE_LDADD) $(CRYPTO_LIBS) $(SSL_LIBS)
 
 gg_force_interactive_SOURCES = gg-force-interactive.cc
 gg_force_interactive_LDADD = $(BASE_LDADD) $(CRYPTO_LIBS) $(SSL_LIBS)
+
+gg_force_remote_SOURCES = gg-force-remote.cc
+gg_force_remote_LDADD = $(BASE_LDADD) $(CRYPTO_LIBS) $(SSL_LIBS)
 
 gg_scheduler_SOURCES = gg-scheduler.cc
 gg_scheduler_LDADD = $(BASE_LDADD) $(CRYPTO_LIBS) $(SSL_LIBS)
