@@ -76,7 +76,8 @@ static void print_gg_message( const string & tag, const string & message )
   cerr << "[" << tag << "] " << message << endl;
 }
 
-Scheduler::Scheduler( std::vector<std::unique_ptr<ExecutionEngine>> && execution_engines,
+Scheduler::Scheduler( ExecutionLoop & loop,
+             std::vector<std::unique_ptr<ExecutionEngine>> && execution_engines,
              std::vector<std::unique_ptr<ExecutionEngine>> && fallback_engines,
              std::unique_ptr<StorageBackend> && storage_backend,
              const std::chrono::milliseconds default_timeout,
@@ -84,7 +85,8 @@ Scheduler::Scheduler( std::vector<std::unique_ptr<ExecutionEngine>> && execution
              const bool status_bar,
              const size_t queue_lookahead,
              const PlacementHeuristic heuristic)
-  : status_bar_( status_bar ),
+  : exec_loop_( loop ),
+    status_bar_( status_bar ),
     lookahead_( queue_lookahead ),
     heuristic_( heuristic ),
     default_timeout_( default_timeout ),
@@ -186,6 +188,11 @@ void Scheduler::add_dag( const std::vector<std::string> & target_hashes )
     shared_ptr<Tracker> dag = make_shared<Tracker>(hash);
     pending_dags_.push_back(dag);
   }
+}
+
+void Scheduler::add_dag( shared_ptr<Tracker> tracker )
+{
+  pending_dags_.push_back(tracker);
 }
 
 vector<shared_ptr<Tracker>> Scheduler::run_once()

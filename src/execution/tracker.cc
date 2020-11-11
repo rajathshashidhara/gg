@@ -31,8 +31,8 @@ void Tracker::print_status() const
   cout << ss.str();
 }
 
-Tracker::Tracker( const std::string & target_hashes )
-  : target_hash_(target_hashes)
+Tracker::Tracker( const std::string & target_hashes, shared_ptr<TCPConnection> connection )
+  : target_hash_(target_hashes), connection_(connection)
 {
   remaining_targets_.insert(target_hash_);
 

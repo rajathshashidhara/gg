@@ -22,6 +22,9 @@ private:
   std::unordered_set<std::string> remaining_targets_ {};
   ExecutionGraph dep_graph_ {};
 
+  std::shared_ptr<TCPConnection> connection_;
+  HTTPRequest request_ {};
+
   std::deque<std::string> job_queue_ {};
   std::unordered_set<std::string> running_jobs_ {};
   size_t finished_jobs_ { 0 };
@@ -33,7 +36,8 @@ private:
 
   friend class Scheduler;
 public:
-  Tracker( const std::string & target_hashes );
+  Tracker( const std::string & target_hashes,
+      std::shared_ptr<TCPConnection> connection = nullptr);
 
   /* Target hash */
   std::string target_hash() const { return target_hash_; }
@@ -49,6 +53,11 @@ public:
 
   /* Get status */
   void print_status() const;
+
+  std::shared_ptr<TCPConnection> get_connection() const { return connection_; }
+
+  void set_request(const HTTPRequest& request) { request_ = request; }
+  HTTPRequest& get_request() { return request_; }
 };
 
 #endif /* TRACKER_HH_ */

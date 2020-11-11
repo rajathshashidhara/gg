@@ -40,6 +40,8 @@ private:
     JobInfo(std::shared_ptr<Tracker>& tracker): tracker_ ( tracker ), start () {}
   };
 
+  ExecutionLoop& exec_loop_;
+
   bool status_bar_;
 
   std::list<std::shared_ptr<Tracker>> pending_dags_ {};
@@ -57,7 +59,6 @@ private:
   Clock::time_point next_timeout_check_ { Clock::now() + timeout_check_interval_ };
   Clock::time_point next_status_print_ { Clock::now() + status_interval_ };
 
-  ExecutionLoop exec_loop_ {};
   std::vector<std::unique_ptr<ExecutionEngine>> exec_engines_;
   std::vector<std::unique_ptr<ExecutionEngine>> fallback_engines_;
 
@@ -72,7 +73,8 @@ private:
   Optional<std::pair<std::list<std::pair<std::string, std::shared_ptr<Tracker>>>::iterator, std::unique_ptr<ExecutionEngine>&>> pick_job();
 
 public:
-  Scheduler( std::vector<std::unique_ptr<ExecutionEngine>> && execution_engines,
+  Scheduler( ExecutionLoop & loop,
+             std::vector<std::unique_ptr<ExecutionEngine>> && execution_engines,
              std::vector<std::unique_ptr<ExecutionEngine>> && fallback_engines,
              std::unique_ptr<StorageBackend> && storage_backend,
              const std::chrono::milliseconds default_timeout = std::chrono::milliseconds { 0 },
@@ -82,6 +84,7 @@ public:
              const PlacementHeuristic heuristic = PlacementHeuristic::First);
 
   void add_dag( const std::vector<std::string> & target_hashes );
+  void add_dag( std::shared_ptr<Tracker> tracker );
   std::vector<std::shared_ptr<Tracker>> run_once();  /* Run this function repeatedly */
   void print_status() const;
 

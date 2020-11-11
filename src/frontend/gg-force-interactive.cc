@@ -352,7 +352,8 @@ int main( int argc, char * argv[] )
       storage_backend = StorageBackend::create_backend( gg::remote::storage_backend_uri() );
     }
 
-    Scheduler scheduler(
+    ExecutionLoop loop;
+    Scheduler scheduler(loop,
       move(execution_engines),
       move(fallback_engines),
       move(storage_backend),
