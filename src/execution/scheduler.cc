@@ -197,6 +197,11 @@ void Scheduler::add_dag( shared_ptr<Tracker> tracker )
 
 vector<shared_ptr<Tracker>> Scheduler::run_once()
 {
+  const auto poll_result = exec_loop_.loop_once( timeout_check_interval_ == 0s
+                                                  ? -1
+                                                  : timeout_check_interval_.count() );
+
+  /* Process updated DAGs */
   vector<shared_ptr<Tracker>> finished_dags;
   for (auto it = pending_dags_.begin(); it != pending_dags_.end();)
   {
@@ -220,11 +225,7 @@ vector<shared_ptr<Tracker>> Scheduler::run_once()
   }
 
   /* Issue retries */
-  const auto poll_result = exec_loop_.loop_once( timeout_check_interval_ == 0s
-                                                  ? -1
-                                                  : timeout_check_interval_.count() );
   const auto clock_now = Clock::now();
-
   if ( timeout_check_interval_ != 0s and clock_now >= next_timeout_check_ ) {
     size_t count = 0;
 
@@ -260,74 +261,77 @@ vector<shared_ptr<Tracker>> Scheduler::run_once()
   if (job_queue_.empty())
     return finished_dags;
 
-  auto result = pick_job();
-  if (!result.initialized()) {
-    return finished_dags;
-  }
+  /* Issue new jobs */
+  while (true) {
+    auto result = pick_job();
+    if (!result.initialized()) {
+      return finished_dags;
+    }
 
-  auto schedule_info = result.get();
-  string thunk_hash = schedule_info.first->first;
-  std::shared_ptr<Tracker> dag = schedule_info.first->second;
-  job_queue_.erase(schedule_info.first);
+    auto schedule_info = result.get();
+    string thunk_hash = schedule_info.first->first;
+    std::shared_ptr<Tracker> dag = schedule_info.first->second;
+    job_queue_.erase(schedule_info.first);
 
-  /* don't bother executing gg-execute if it's in the cache */
-  Optional<ReductionResult> cache_entry;
+    /* don't bother executing gg-execute if it's in the cache */
+    Optional<ReductionResult> cache_entry;
 
-  while ( true ) {
-    auto temp_cache_entry = gg::cache::check( cache_entry.initialized() ? cache_entry->hash
-                                                                        : thunk_hash );
+    while ( true ) {
+      auto temp_cache_entry = gg::cache::check( cache_entry.initialized() ? cache_entry->hash
+                                                                          : thunk_hash );
 
-    if ( temp_cache_entry.initialized() ) {
-      cache_entry = move( temp_cache_entry );
+      if ( temp_cache_entry.initialized() ) {
+        cache_entry = move( temp_cache_entry );
+      }
+      else {
+        break;
+      }
+    }
+
+    if (cache_entry.initialized()) {
+      Thunk thunk { ThunkReader::read( gg::paths::blob( thunk_hash ), thunk_hash ) };
+      vector<ThunkOutput> new_outputs;
+
+      for ( const auto & tag : thunk.outputs() ) {
+        Optional<cache::ReductionResult> result = cache::check( gg::hash::for_output( thunk_hash, tag ) );
+
+        if ( not result.initialized() ) {
+          throw runtime_error( "inconsistent cache entries" );
+        }
+
+        new_outputs.emplace_back( result->hash, tag );
+      }
+
+      finalize_execution( thunk_hash, move( new_outputs ), 0 );
     }
     else {
-      break;
-    }
-  }
+      const Thunk & thunk = dag->dep_graph_.get_thunk( thunk_hash );
+      std::unique_ptr<ExecutionEngine> &engine = schedule_info.second;
+      engine->force_thunk( thunk, exec_loop_ );
 
-  if (cache_entry.initialized()) {
-    Thunk thunk { ThunkReader::read( gg::paths::blob( thunk_hash ), thunk_hash ) };
-    vector<ThunkOutput> new_outputs;
+      auto it = running_jobs_.find( thunk_hash );
+      if (it == running_jobs_.end()) {
+        JobInfo job_info(dag);
 
-    for ( const auto & tag : thunk.outputs() ) {
-      Optional<cache::ReductionResult> result = cache::check( gg::hash::for_output( thunk_hash, tag ) );
+        job_info.start = Clock::now();
+        job_info.timeout = thunk.timeout() * timeout_multiplier_;
+        job_info.restarts++;
 
-      if ( not result.initialized() ) {
-        throw runtime_error( "inconsistent cache entries" );
-      }
+        if ( job_info.timeout == 0s ) {
+          job_info.timeout = default_timeout_;
+        }
 
-      new_outputs.emplace_back( result->hash, tag );
-    }
+        running_jobs_.insert( make_pair(thunk_hash, move(job_info) ) );
+      } else {
+        JobInfo & job_info = it->second;
 
-    finalize_execution( thunk_hash, move( new_outputs ), 0 );
-  }
-  else {
-    const Thunk & thunk = dag->dep_graph_.get_thunk( thunk_hash );
-    std::unique_ptr<ExecutionEngine> &engine = schedule_info.second;
-    engine->force_thunk( thunk, exec_loop_ );
+        job_info.start = Clock::now();
+        job_info.timeout = thunk.timeout() * timeout_multiplier_;
+        job_info.restarts++;
 
-    auto it = running_jobs_.find( thunk_hash );
-    if (it == running_jobs_.end()) {
-      JobInfo job_info(dag);
-
-      job_info.start = Clock::now();
-      job_info.timeout = thunk.timeout() * timeout_multiplier_;
-      job_info.restarts++;
-
-      if ( job_info.timeout == 0s ) {
-        job_info.timeout = default_timeout_;
-      }
-
-      running_jobs_.insert( make_pair(thunk_hash, move(job_info) ) );
-    } else {
-      JobInfo & job_info = it->second;
-
-      job_info.start = Clock::now();
-      job_info.timeout = thunk.timeout() * timeout_multiplier_;
-      job_info.restarts++;
-
-      if ( job_info.timeout == 0s ) {
-        job_info.timeout = default_timeout_;
+        if ( job_info.timeout == 0s ) {
+          job_info.timeout = default_timeout_;
+        }
       }
     }
   }
