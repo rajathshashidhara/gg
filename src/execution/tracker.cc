@@ -71,9 +71,13 @@ void Tracker::finalize_execution( const string & old_hash,
 
 string Tracker::next()
 {
-  string job = job_queue_.front();
-  running_jobs_.insert( job );
-  job_queue_.pop_front();
+  string job;
+
+  if (!job_queue_.empty()) {
+    job = job_queue_.front();
+    running_jobs_.insert( job );
+    job_queue_.pop_front();
+  }
 
   return job;
 }

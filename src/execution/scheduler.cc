@@ -212,8 +212,6 @@ vector<shared_ptr<Tracker>> Scheduler::run_once()
     }
   }
 
-  print_status();
-
   /* Issue retries */
   const auto poll_result = exec_loop_.loop_once( timeout_check_interval_ == 0s
                                                   ? -1
@@ -241,6 +239,11 @@ vector<shared_ptr<Tracker>> Scheduler::run_once()
       print_gg_message( "info", "duplicating " + to_string( count ) +
                                 " job" + ( ( count == 1 ) ? "" : "s" ) );
     }
+  }
+
+  if ( status_interval_ != 0s and clock_now >= next_status_print_ ) {
+    print_status();
+    next_status_print_ += status_interval_;
   }
 
   if (poll_result.result == Poller::Result::Type::Exit) {

@@ -52,8 +52,10 @@ private:
 
   std::chrono::milliseconds default_timeout_;
   size_t timeout_multiplier_;
+  std::chrono::seconds status_interval_ { 1 };
   std::chrono::milliseconds timeout_check_interval_ { default_timeout_ / 2 };
   Clock::time_point next_timeout_check_ { Clock::now() + timeout_check_interval_ };
+  Clock::time_point next_status_print_ { Clock::now() + status_interval_ };
 
   ExecutionLoop exec_loop_ {};
   std::vector<std::unique_ptr<ExecutionEngine>> exec_engines_;
