@@ -34,6 +34,14 @@ HTTPRequest GGExecutionEngine::generate_request( const Thunk & thunk )
 void GGExecutionEngine::force_thunk( const Thunk & thunk,
                                      ExecutionLoop & exec_loop )
 {
+  /* Add dependencies to cache! */
+  for (auto & item : thunk.values()) {
+    cache_.insert(item.first);
+  }
+  for (auto & item : thunk.executables()) {
+    cache_.insert(item.first);
+  }
+
   HTTPRequest request = generate_request( thunk );
 
   exec_loop.make_http_request<TCPConnection>( thunk.hash(),

@@ -3,6 +3,8 @@
 #ifndef ENGINE_GG_HH
 #define ENGINE_GG_HH
 
+#include <unordered_set>
+
 #include "engine.hh"
 #include "net/http_request.hh"
 #include "thunk/thunk.hh"
@@ -11,6 +13,7 @@ class GGExecutionEngine : public ExecutionEngine
 {
 private:
   Address address_;
+  std::unordered_set<std::string> cache_ {};
 
   size_t running_jobs_ { 0 };
 

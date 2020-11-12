@@ -14,6 +14,7 @@
 #include "net/s3.hh"
 #include "tui/status_bar.hh"
 #include "util/optional.hh"
+#include "util/iterator.hh"
 #include "util/exception.hh"
 #include "util/timeit.hh"
 #include "util/path.hh"
@@ -344,6 +345,8 @@ typedef std::list<std::pair<std::string, std::shared_ptr<Tracker>>>::iterator jo
 Optional<pair<job_iterator, std::unique_ptr<ExecutionEngine>&>> Scheduler::pick_job()
 {
   Optional<pair<job_iterator, std::unique_ptr<ExecutionEngine>&>> result;
+  int max_value = -1;
+  int try_fallback = 1;
 
   switch (heuristic_)
   {
@@ -359,6 +362,8 @@ Optional<pair<job_iterator, std::unique_ptr<ExecutionEngine>&>> Scheduler::pick_
           continue;
 
         if (exec_engine->can_execute(thunk)) {
+          try_fallback = 0;
+
           if (exec_engine->job_count() >= exec_engine->max_jobs())
             continue;
 
@@ -368,6 +373,127 @@ Optional<pair<job_iterator, std::unique_ptr<ExecutionEngine>&>> Scheduler::pick_
       }
     }
 
+    break;
+
+  case PlacementHeuristic::Random:
+    throw runtime_error("not yet implemented");
+    break;
+
+  case PlacementHeuristic::MostObjects:
+    for (auto thunk_it = job_queue_.begin(); thunk_it != job_queue_.end(); thunk_it++)
+    {
+      std::shared_ptr<Tracker> dag = thunk_it->second;
+      const Thunk& thunk = dag->dep_graph_.get_thunk(thunk_it->first);
+
+      for (auto & exec_engine : fallback_engines_)
+      {
+        if (exec_engine->is_remote() && thunk.is_localonly())
+          continue;
+
+        if (!exec_engine->can_execute(thunk))
+          continue;
+
+        try_fallback = 0;
+        if (exec_engine->job_count() >= exec_engine->max_jobs())
+          continue;
+
+        int metric = 0;
+        for (const auto & item : join_containers( thunk.values(), thunk.executables())) {
+          if (exec_engine->in_cache(item.first)) {
+            metric++;
+          }
+        }
+
+        if (metric > max_value) {
+          max_value = metric;
+          Optional<pair<job_iterator, std::unique_ptr<ExecutionEngine>&>> new_result;
+          new_result.initialize(thunk_it, exec_engine);
+          result = move(new_result);
+        }
+      }
+    }
+    break;
+
+  case PlacementHeuristic::MostObjectsSize:
+    for (auto thunk_it = job_queue_.begin(); thunk_it != job_queue_.end(); thunk_it++)
+    {
+      std::shared_ptr<Tracker> dag = thunk_it->second;
+      const Thunk& thunk = dag->dep_graph_.get_thunk(thunk_it->first);
+
+      for (auto & exec_engine : fallback_engines_)
+      {
+        if (exec_engine->is_remote() && thunk.is_localonly())
+          continue;
+
+        if (!exec_engine->can_execute(thunk))
+          continue;
+
+        try_fallback = 0;
+        if (exec_engine->job_count() >= exec_engine->max_jobs())
+          continue;
+
+        int metric = 0;
+        for (const auto & item : join_containers( thunk.values(), thunk.executables())) {
+          if (exec_engine->in_cache(item.first)) {
+            metric += gg::hash::size(item.first);
+          }
+        }
+
+        if (metric > max_value) {
+          max_value = metric;
+          Optional<pair<job_iterator, std::unique_ptr<ExecutionEngine>&>> new_result;
+          new_result.initialize(thunk_it, exec_engine);
+          result = move(new_result);
+        }
+      }
+    }
+    break;
+
+  case PlacementHeuristic::LargestObject:
+    for (auto thunk_it = job_queue_.begin(); thunk_it != job_queue_.end(); thunk_it++)
+    {
+      std::shared_ptr<Tracker> dag = thunk_it->second;
+      const Thunk& thunk = dag->dep_graph_.get_thunk(thunk_it->first);
+
+      for (auto & exec_engine : fallback_engines_)
+      {
+        if (exec_engine->is_remote() && thunk.is_localonly())
+          continue;
+
+        if (!exec_engine->can_execute(thunk))
+          continue;
+
+        try_fallback = 0;
+        if (exec_engine->job_count() >= exec_engine->max_jobs())
+          continue;
+
+        int metric = 0;
+        for (const auto & item : join_containers( thunk.values(), thunk.executables())) {
+          if (exec_engine->in_cache(item.first)) {
+            metric = max(metric, (int) gg::hash::size(item.first));
+          }
+        }
+
+        if (metric > max_value) {
+          max_value = metric;
+          Optional<pair<job_iterator, std::unique_ptr<ExecutionEngine>&>> new_result;
+          new_result.initialize(thunk_it, exec_engine);
+          result = move(new_result);
+        }
+      }
+    }
+    break;
+
+  case PlacementHeuristic::LRU:
+    throw runtime_error("not yet implemented");
+    break;
+
+  default:
+    throw runtime_error("invalid placement heuristic");
+  }
+
+  /* try fallback engines! */
+  if (!result.initialized() && try_fallback) {
     /* Try fallback engines! */
     for (auto thunk_it = job_queue_.begin(); thunk_it != job_queue_.end(); thunk_it++)
     {
@@ -388,10 +514,6 @@ Optional<pair<job_iterator, std::unique_ptr<ExecutionEngine>&>> Scheduler::pick_
         }
       }
     }
-    break;
-
-  default:
-    throw runtime_error("invalid placement heuristic");
   }
 
   return result;
