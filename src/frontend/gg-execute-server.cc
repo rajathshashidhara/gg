@@ -18,6 +18,7 @@
 #include "util/system_runner.hh"
 #include "util/path.hh"
 #include "util/base64.hh"
+#include "util/pipe.hh"
 
 using namespace std;
 using namespace gg;
@@ -28,7 +29,7 @@ string get_canned_response( const int status, const HTTPRequest & request )
     { 200, "OK" },
     { 400, "Bad Request" },
     { 404, "Not Found" },
-    { 405, "Mehtod Not Allowed" },
+    { 405, "Method Not Allowed" },
   };
 
   HTTPResponse response;
@@ -110,11 +111,16 @@ int main( int argc, char * argv[] )
                 continue;
               }
 
+              int pipe_fds[ 2 ];
+              CheckSystemCall( "pipe", pipe( pipe_fds ) );
+
               /* now we should execute the thunk */
               loop.add_child_process( "thunk-execution",
                 [conn_weak=weak_ptr<TCPConnection>( connection ),
-                 http_request=move( http_request ), exec_request]
+                 http_request=move( http_request ), exec_request, pipe_fds]
                 ( const uint64_t, const string &, const int status ) { /* success callback */
+                  pair<FileDescriptor, FileDescriptor> pipe { pipe_fds[0], pipe_fds[1] };
+
                   if ( conn_weak.expired() ) {
                     /* there's not connection left to the guy who requested this,
                        let's forget about it */
@@ -157,8 +163,13 @@ int main( int argc, char * argv[] )
                     *response.add_executed_thunks() = execution_response;
                   }
 
+                  string output;
+                  pipe.second.close();
+                  while ( not pipe.first.eof() ) {
+                    output.append(pipe.first.read());
+                  }
                   response.set_return_code( status );
-                  response.set_stdout( "" );
+                  response.set_stdout( output );
 
                   const string response_json = protoutil::to_json( response );
 
@@ -174,13 +185,14 @@ int main( int argc, char * argv[] )
                   auto conn = conn_weak.lock();
                   conn->enqueue_write( http_response.str() );
                 },
-                [exec_request] () -> int { /* child process */
+                [pipe_out_fd=pipe_fds[1], exec_request] () -> int { /* child process */
                   setenv( "GG_STORAGE_URI", exec_request.storage_backend().c_str(), true );
 
                   vector<string> command {
                     "gg-execute-static",
                     "--get-dependencies",
                     "--put-output",
+                    "--timelog",
                     // "--cleanup"
                   };
 
@@ -190,6 +202,8 @@ int main( int argc, char * argv[] )
 
                     command.emplace_back( request_item.hash() );
                   }
+
+                  CheckSystemCall( "dup2", dup2( pipe_out_fd, STDOUT_FILENO ) );
 
                   return ezexec( command[ 0 ], command, {}, true, true );
                 },
