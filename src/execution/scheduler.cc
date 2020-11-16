@@ -347,6 +347,7 @@ Optional<pair<job_iterator, std::unique_ptr<ExecutionEngine>&>> Scheduler::pick_
   Optional<pair<job_iterator, std::unique_ptr<ExecutionEngine>&>> result;
   int max_value = -1;
   int try_fallback = 1;
+  size_t ahead = 0;
 
   switch (heuristic_)
   {
@@ -382,6 +383,9 @@ Optional<pair<job_iterator, std::unique_ptr<ExecutionEngine>&>> Scheduler::pick_
   case PlacementHeuristic::MostObjects:
     for (auto thunk_it = job_queue_.begin(); thunk_it != job_queue_.end(); thunk_it++)
     {
+      if (ahead >= lookahead_)
+        break;
+
       std::shared_ptr<Tracker> dag = thunk_it->second;
       const Thunk& thunk = dag->dep_graph_.get_thunk(thunk_it->first);
 
@@ -411,12 +415,17 @@ Optional<pair<job_iterator, std::unique_ptr<ExecutionEngine>&>> Scheduler::pick_
           result = move(new_result);
         }
       }
+
+      ahead++;
     }
     break;
 
   case PlacementHeuristic::MostObjectsSize:
     for (auto thunk_it = job_queue_.begin(); thunk_it != job_queue_.end(); thunk_it++)
     {
+      if (ahead >= lookahead_)
+        break;
+
       std::shared_ptr<Tracker> dag = thunk_it->second;
       const Thunk& thunk = dag->dep_graph_.get_thunk(thunk_it->first);
 
@@ -446,12 +455,17 @@ Optional<pair<job_iterator, std::unique_ptr<ExecutionEngine>&>> Scheduler::pick_
           result = move(new_result);
         }
       }
+
+      ahead++;
     }
     break;
 
   case PlacementHeuristic::LargestObject:
     for (auto thunk_it = job_queue_.begin(); thunk_it != job_queue_.end(); thunk_it++)
     {
+      if (ahead >= lookahead_)
+        break;
+
       std::shared_ptr<Tracker> dag = thunk_it->second;
       const Thunk& thunk = dag->dep_graph_.get_thunk(thunk_it->first);
 
@@ -481,6 +495,8 @@ Optional<pair<job_iterator, std::unique_ptr<ExecutionEngine>&>> Scheduler::pick_
           result = move(new_result);
         }
       }
+
+      ahead++;
     }
     break;
 
