@@ -83,7 +83,8 @@ void usage( const char * argv0 )
        << "       " << "[-s|--no-status] [-d|--no-download] [-S|--sandboxed]" << endl
        << "       " << "[[-j|--jobs=<N>] [-e|--engine=<name>[=ENGINE_ARGS]]]... " << endl
        << "       " << "[[-j|--jobs=<N>] [-f|--fallback-engine=<name>[=ENGINE_ARGS]]]..." << endl
-       << "       " << "[-T|--timeout=<t>] [-m|--timeout-multiplier=<N>] IP PORT THUNKS..." << endl
+       << "       " << "[-T|--timeout=<t>] [-m|--timeout-multiplier=<N>]" << endl
+       << "       " << "[-P|--placement=<heuristic>] IP PORT THUNKS..." << endl
        << endl
        << "Available engines:" << endl
        << "  - local   Executes the jobs on the local machine" << endl
@@ -92,6 +93,14 @@ void usage( const char * argv0 )
        << "  - meow    Executes the jobs on AWS Lambda with long-running workers" << endl
        << "  - gcloud  Executes the jobs on Google Cloud Functions" << endl
        << "  - baseline Baseline for SimpleDB" << endl
+       << endl
+       << "Available heuristics:" << endl
+       << "  - first        Selects the first available <job, engine> pair" << endl
+       << "  - random       Selects a random <job, engine> pair" << endl
+       << "  - lru          Selects the least recently used engine for the first job" << endl
+       << "  - mostobj      Selects a <job, engine> pair with the highest overlap in number of locally cached objects" << endl
+       << "  - mostobjsize  Selects a <job, engine> pair with the highest overlap in total size of locally cached objects" << endl
+       << "  - largestobj   Selects a <job, engine> pair with the largest locally cached object " << endl
        << endl
        << "Environment variables:" << endl
        << "  - " << FORCE_NO_STATUS << endl
@@ -227,6 +236,47 @@ unique_ptr<ExecutionEngine> make_execution_engine( const EngineInfo & engine )
   }
 }
 
+using PlacementInfo = tuple<PlacementHeuristic, size_t>;
+
+PlacementInfo parse_placement_heuristic(const string& params)
+{
+  string heuristic;
+  size_t lookahead;
+
+  string::size_type eqpos = params.find( '=' );
+  if ( eqpos == string::npos ) {
+    lookahead = 1;
+    heuristic = params;
+  } else {
+    heuristic = params.substr(0, eqpos);
+    lookahead = stoll(params.substr(eqpos + 1));
+  }
+
+  if (heuristic == "first") {
+    return make_tuple(PlacementHeuristic::First, lookahead);
+  }
+  else if (heuristic == "random") {
+    return make_tuple(PlacementHeuristic::Random, lookahead);
+  }
+  else if (heuristic == "lru") {
+    return make_tuple(PlacementHeuristic::LRU, lookahead);
+  }
+  else if (heuristic == "mostobj") {
+    return make_tuple(PlacementHeuristic::MostObjects, lookahead);
+  }
+  else if (heuristic == "mostobjsize") {
+    return make_tuple(PlacementHeuristic::MostObjectsSize, lookahead);
+  }
+  else if (heuristic == "largestobj") {
+    return make_tuple(PlacementHeuristic::LargestObject, lookahead);
+  }
+  else
+  {
+    throw runtime_error( "unknown placement heuristic ");
+  }
+
+}
+
 void sigint_handler( int )
 {
   throw runtime_error( "killed by signal" );
@@ -255,6 +305,7 @@ int main( int argc, char * argv[] )
     size_t max_jobs = thread::hardware_concurrency();
     vector<EngineInfo> engines_info;
     vector<EngineInfo> fallback_engines_info;
+    PlacementInfo placement = make_tuple(PlacementHeuristic::First, 1);
 
     struct option long_options[] = {
       { "no-status",          no_argument,       nullptr, 's' },
@@ -263,6 +314,7 @@ int main( int argc, char * argv[] )
       { "timeout",            required_argument, nullptr, 'T' },
       { "timeout-multiplier", required_argument, nullptr, 'T' },
       { "engine",             required_argument, nullptr, 'e' },
+      { "placement",          required_argument, nullptr, 'P' },
       { "fallback-engine",    required_argument, nullptr, 'f' },
       { nullptr,              0,                 nullptr,  0  },
     };
@@ -294,6 +346,10 @@ int main( int argc, char * argv[] )
       case 'e':
         engines_info.emplace_back( move( parse_engine( optarg, max_jobs ) ) );
         total_max_jobs += max_jobs;
+        break;
+
+      case 'P':
+        placement = parse_placement_heuristic(optarg);
         break;
 
       case 'f':
@@ -360,7 +416,8 @@ int main( int argc, char * argv[] )
       move(fallback_engines),
       move(storage_backend),
       std::chrono::milliseconds { timeout * 1000 },
-      timeout_multiplier, status_bar
+      timeout_multiplier, status_bar,
+      std::get<1>(placement), std::get<0>(placement)
     );
 
     exec_loop.make_listener( listen_addr,
