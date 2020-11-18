@@ -84,6 +84,7 @@ void GGExecutionEngine::force_thunk( const Thunk & thunk,
 
         vector<ThunkOutput> thunk_outputs;
         for ( auto & output : response.outputs ) {
+          cache_.insert(output.hash);
           thunk_outputs.emplace_back( move( output.hash ), move( output.tag ) );
         }
 
