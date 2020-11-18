@@ -48,7 +48,7 @@ public:
   virtual size_t job_count() const = 0;
   size_t max_jobs() const { return max_jobs_; }
   virtual std::string label() const = 0;
-  virtual bool in_cache(std::string) const { return false; }
+  virtual bool in_cache(const std::string&) const { return false; }
 
   virtual ~ExecutionEngine() {}
 };

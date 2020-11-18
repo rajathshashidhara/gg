@@ -389,7 +389,7 @@ Optional<pair<job_iterator, std::unique_ptr<ExecutionEngine>&>> Scheduler::pick_
       std::shared_ptr<Tracker> dag = thunk_it->second;
       const Thunk& thunk = dag->dep_graph_.get_thunk(thunk_it->first);
 
-      for (auto & exec_engine : fallback_engines_)
+      for (auto & exec_engine : exec_engines_)
       {
         if (exec_engine->is_remote() && thunk.is_localonly())
           continue;
@@ -408,7 +408,7 @@ Optional<pair<job_iterator, std::unique_ptr<ExecutionEngine>&>> Scheduler::pick_
           }
         }
 
-        if (metric > max_value) {
+        if (metric > max_value or !result.initialized()) {
           max_value = metric;
           Optional<pair<job_iterator, std::unique_ptr<ExecutionEngine>&>> new_result;
           new_result.initialize(thunk_it, exec_engine);
@@ -429,7 +429,7 @@ Optional<pair<job_iterator, std::unique_ptr<ExecutionEngine>&>> Scheduler::pick_
       std::shared_ptr<Tracker> dag = thunk_it->second;
       const Thunk& thunk = dag->dep_graph_.get_thunk(thunk_it->first);
 
-      for (auto & exec_engine : fallback_engines_)
+      for (auto & exec_engine : exec_engines_)
       {
         if (exec_engine->is_remote() && thunk.is_localonly())
           continue;
@@ -448,7 +448,7 @@ Optional<pair<job_iterator, std::unique_ptr<ExecutionEngine>&>> Scheduler::pick_
           }
         }
 
-        if (metric > max_value) {
+        if (metric > max_value or !result.initialized()) {
           max_value = metric;
           Optional<pair<job_iterator, std::unique_ptr<ExecutionEngine>&>> new_result;
           new_result.initialize(thunk_it, exec_engine);
@@ -469,7 +469,7 @@ Optional<pair<job_iterator, std::unique_ptr<ExecutionEngine>&>> Scheduler::pick_
       std::shared_ptr<Tracker> dag = thunk_it->second;
       const Thunk& thunk = dag->dep_graph_.get_thunk(thunk_it->first);
 
-      for (auto & exec_engine : fallback_engines_)
+      for (auto & exec_engine : exec_engines_)
       {
         if (exec_engine->is_remote() && thunk.is_localonly())
           continue;
@@ -488,7 +488,7 @@ Optional<pair<job_iterator, std::unique_ptr<ExecutionEngine>&>> Scheduler::pick_
           }
         }
 
-        if (metric > max_value) {
+        if (metric > max_value or !result.initialized()) {
           max_value = metric;
           Optional<pair<job_iterator, std::unique_ptr<ExecutionEngine>&>> new_result;
           new_result.initialize(thunk_it, exec_engine);

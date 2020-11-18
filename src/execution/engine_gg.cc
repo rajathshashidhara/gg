@@ -11,6 +11,7 @@
 #include "util/system_runner.hh"
 #include "util/units.hh"
 #include "util/base64.hh"
+#include "util/iterator.hh"
 
 using namespace std;
 using namespace gg;
@@ -35,10 +36,7 @@ void GGExecutionEngine::force_thunk( const Thunk & thunk,
                                      ExecutionLoop & exec_loop )
 {
   /* Add dependencies to cache! */
-  for (auto & item : thunk.values()) {
-    cache_.insert(item.first);
-  }
-  for (auto & item : thunk.executables()) {
+  for (auto & item : join_containers(thunk.values(), thunk.executables())) {
     cache_.insert(item.first);
   }
 
@@ -112,4 +110,13 @@ void GGExecutionEngine::force_thunk( const Thunk & thunk,
 size_t GGExecutionEngine::job_count() const
 {
   return running_jobs_;
+}
+
+
+bool GGExecutionEngine::in_cache(const std::string& key) const
+{
+  if (cache_.find(key) == cache_.end())
+    return false;
+
+  return true;
 }

@@ -31,6 +31,7 @@ public:
   bool is_remote() const { return true; }
   std::string label() const override { return "remote"; }
   bool can_execute( const gg::thunk::Thunk & ) const { return true; }
+  bool in_cache(const std::string&) const;
 };
 
 #endif /* ENGINE_GG_HH */

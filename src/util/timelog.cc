@@ -23,7 +23,7 @@ void TimeLog::add_point( const std::string & title )
 string TimeLog::str() const
 {
   ostringstream oss;
-  oss << start_.count() << endl;
+  // oss << start_.count() << endl;
 
   for ( const auto & point : points_ ) {
     oss << point.first << " " << point.second.count() << endl;
