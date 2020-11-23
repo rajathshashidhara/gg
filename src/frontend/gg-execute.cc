@@ -183,6 +183,11 @@ void do_cleanup( const Thunk & thunk )
   }
 }
 
+void cache_cleanup()
+{
+
+}
+
 void fetch_dependencies( unique_ptr<StorageBackend> & storage_backend,
                          const Thunk & thunk )
 {

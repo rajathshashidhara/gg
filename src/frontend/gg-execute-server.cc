@@ -5,6 +5,8 @@
 #include <stdexcept>
 #include <cstdlib>
 #include <map>
+#include <list>
+#include <unordered_map>
 
 #include "protobufs/gg.pb.h"
 #include "protobufs/util.hh"
@@ -15,10 +17,13 @@
 #include "execution/loop.hh"
 #include "thunk/ggutils.hh"
 #include "thunk/thunk.hh"
+#include "thunk/thunk_reader.hh"
 #include "util/system_runner.hh"
 #include "util/path.hh"
 #include "util/base64.hh"
 #include "util/pipe.hh"
+#include "util/iterator.hh"
+#include "util/lru.hh"
 
 using namespace std;
 using namespace gg;
@@ -46,7 +51,7 @@ string get_canned_response( const int status, const HTTPRequest & request )
 
 void usage( char * argv0 )
 {
-  cerr << "Usage: " << argv0 << " IP PORT" << endl;
+  cerr << "Usage: " << argv0 << " IP PORT [CACHE-SIZE]" << endl;
 }
 
 int main( int argc, char * argv[] )
@@ -56,7 +61,7 @@ int main( int argc, char * argv[] )
       abort();
     }
 
-    if ( argc != 3 ) {
+    if ( argc < 3 ) {
       usage( argv[ 0 ] );
       return EXIT_FAILURE;
     }
@@ -72,16 +77,23 @@ int main( int argc, char * argv[] )
 
     Address listen_addr { argv[ 1 ], static_cast<uint16_t>( port_argv ) };
 
+    size_t cache_size = std::numeric_limits<size_t>::max();
+
+    if (argc == 4) {
+      cache_size = (size_t) atol(argv[3]);
+    }
+
+    LRU cache(cache_size);
     ExecutionLoop loop;
 
     loop.make_listener( listen_addr,
-      [] ( ExecutionLoop & loop, TCPSocket && socket ) {
+      [&cache] ( ExecutionLoop & loop, TCPSocket && socket ) {
         /* an incoming connection! */
 
         auto request_parser = make_shared<HTTPRequestParser>();
 
         loop.add_connection<TCPSocket>( move( socket ),
-          [request_parser, &loop] ( shared_ptr<TCPConnection> connection, string && data ) {
+          [request_parser, &loop, &cache] ( shared_ptr<TCPConnection> connection, string && data ) {
             request_parser->parse( move( data ) );
 
             while ( not request_parser->empty() ) {
@@ -117,7 +129,7 @@ int main( int argc, char * argv[] )
               /* now we should execute the thunk */
               loop.add_child_process( "thunk-execution",
                 [conn_weak=weak_ptr<TCPConnection>( connection ),
-                 http_request=move( http_request ), exec_request, pipe_fds]
+                 http_request=move( http_request ), exec_request, pipe_fds, &cache]
                 ( const uint64_t, const string &, const int status ) { /* success callback */
                   pair<FileDescriptor, FileDescriptor> pipe { pipe_fds[0], pipe_fds[1] };
 
@@ -149,6 +161,8 @@ int main( int argc, char * argv[] )
                       const string output_data = result->hash[ 0 ] == 'T'
                                                ? base64::encode( roost::read_file( output_path ) )
                                                : "";
+
+                      cache.access(result->hash);
 
                       output_item.set_tag( tag );
                       output_item.set_hash( result->hash );
@@ -184,8 +198,10 @@ int main( int argc, char * argv[] )
 
                   auto conn = conn_weak.lock();
                   conn->enqueue_write( http_response.str() );
+
+                  cache.cleanup(true);
                 },
-                [pipe_out_fd=pipe_fds[1], exec_request] () -> int { /* child process */
+                [pipe_out_fd=pipe_fds[1], exec_request, &cache] () -> int { /* child process */
                   setenv( "GG_STORAGE_URI", exec_request.storage_backend().c_str(), true );
 
                   vector<string> command {
@@ -201,6 +217,12 @@ int main( int argc, char * argv[] )
                                           paths::blob( request_item.hash() ) );
 
                     command.emplace_back( request_item.hash() );
+
+                    gg::thunk::Thunk thunk { ThunkReader::read(paths::blob( request_item.hash() ), request_item.hash() ) };
+                    cache.access(thunk.hash());
+                    for (auto& dep : join_containers(thunk.values(), thunk.executables()) ) {
+                      cache.access(dep.first);
+                    }
                   }
 
                   CheckSystemCall( "dup2", dup2( pipe_out_fd, STDOUT_FILENO ) );

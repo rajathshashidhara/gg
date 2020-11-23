@@ -8,12 +8,15 @@
 #include "engine.hh"
 #include "net/http_request.hh"
 #include "thunk/thunk.hh"
+#include "util/lru.hh"
+
+#define CACHE_SIZE std::numeric_limits<size_t>::max()
 
 class GGExecutionEngine : public ExecutionEngine
 {
 private:
   Address address_;
-  std::unordered_set<std::string> cache_ {};
+  LRU cache_ { CACHE_SIZE };
 
   size_t running_jobs_ { 0 };
 

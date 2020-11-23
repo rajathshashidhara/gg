@@ -36,8 +36,9 @@ void GGExecutionEngine::force_thunk( const Thunk & thunk,
                                      ExecutionLoop & exec_loop )
 {
   /* Add dependencies to cache! */
+  cache_.access(thunk.hash());
   for (auto & item : join_containers(thunk.values(), thunk.executables())) {
-    cache_.insert(item.first);
+    cache_.access(item.first);
   }
 
   HTTPRequest request = generate_request( thunk );
@@ -84,11 +85,13 @@ void GGExecutionEngine::force_thunk( const Thunk & thunk,
 
         vector<ThunkOutput> thunk_outputs;
         for ( auto & output : response.outputs ) {
-          cache_.insert(output.hash);
+          cache_.access(output.hash);
           thunk_outputs.emplace_back( move( output.hash ), move( output.tag ) );
         }
 
         success_callback_( response.thunk_hash, move( thunk_outputs ), 0 );
+
+        cache_.cleanup();
 
         break;
       }
@@ -116,8 +119,5 @@ size_t GGExecutionEngine::job_count() const
 
 bool GGExecutionEngine::in_cache(const std::string& key) const
 {
-  if (cache_.find(key) == cache_.end())
-    return false;
-
-  return true;
+  return cache_.find(key);
 }
