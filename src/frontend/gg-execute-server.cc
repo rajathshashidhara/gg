@@ -123,6 +123,17 @@ int main( int argc, char * argv[] )
                 continue;
               }
 
+              for ( auto & request_item : exec_request.thunks() ) {
+                roost::atomic_create( base64::decode( request_item.data() ),
+                                      paths::blob( request_item.hash() ) );
+
+                gg::thunk::Thunk thunk { ThunkReader::read(paths::blob( request_item.hash() ), request_item.hash() ) };
+                cache->access(thunk.hash());
+                for (auto& dep : join_containers(thunk.values(), thunk.executables()) ) {
+                  cache->access(dep.first);
+                }
+              }
+
               int pipe_fds[ 2 ];
               CheckSystemCall( "pipe", pipe( pipe_fds ) );
 
@@ -201,7 +212,7 @@ int main( int argc, char * argv[] )
 
                   cache->cleanup(true);
                 },
-                [pipe_out_fd=pipe_fds[1], exec_request, cache] () -> int { /* child process */
+                [pipe_out_fd=pipe_fds[1], exec_request] () -> int { /* child process */
                   setenv( "GG_STORAGE_URI", exec_request.storage_backend().c_str(), true );
 
                   vector<string> command {
@@ -213,16 +224,7 @@ int main( int argc, char * argv[] )
                   };
 
                   for ( auto & request_item : exec_request.thunks() ) {
-                    roost::atomic_create( base64::decode( request_item.data() ),
-                                          paths::blob( request_item.hash() ) );
-
                     command.emplace_back( request_item.hash() );
-
-                    gg::thunk::Thunk thunk { ThunkReader::read(paths::blob( request_item.hash() ), request_item.hash() ) };
-                    cache->access(thunk.hash());
-                    for (auto& dep : join_containers(thunk.values(), thunk.executables()) ) {
-                      cache->access(dep.first);
-                    }
                   }
 
                   CheckSystemCall( "dup2", dup2( pipe_out_fd, STDOUT_FILENO ) );
