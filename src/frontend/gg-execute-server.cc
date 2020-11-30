@@ -154,6 +154,11 @@ int main( int argc, char * argv[] )
 
                   for ( auto & request_item : exec_request.thunks() ) {
                     const string & hash = request_item.hash();
+                    gg::thunk::Thunk thunk { ThunkReader::read(paths::blob( hash ), hash ) };
+                    cache->access(thunk.hash());
+                    for (auto& dep : join_containers(thunk.values(), thunk.executables()) ) {
+                      cache->access(dep.first);
+                    }
 
                     protobuf::ResponseItem execution_response;
                     execution_response.set_thunk_hash( request_item.hash() );
@@ -224,6 +229,8 @@ int main( int argc, char * argv[] )
                   };
 
                   for ( auto & request_item : exec_request.thunks() ) {
+                    roost::atomic_create( base64::decode( request_item.data() ),
+                                          paths::blob( request_item.hash() ) );
                     command.emplace_back( request_item.hash() );
                   }
 
