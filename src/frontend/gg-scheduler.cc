@@ -209,7 +209,8 @@ unique_ptr<ExecutionEngine> make_execution_engine( const EngineInfo & engine )
       port = stoi( engine_params.substr( colonpos + 1 ) );
     }
 
-    return make_unique<GGExecutionEngine>( max_jobs, Address { host_ip, port } );
+    size_t cache_size = stoul(safe_getenv_or("GG_EXEC_CACHE_SIZE", std::to_string(std::numeric_limits<size_t>::max())));
+    return make_unique<GGExecutionEngine>( max_jobs, Address { host_ip, port }, cache_size );
   }
   else if ( engine_name == "meow" ) {
     if ( engine_params.length() == 0 ) {

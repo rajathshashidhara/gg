@@ -36,16 +36,16 @@ void GGExecutionEngine::force_thunk( const Thunk & thunk,
                                      ExecutionLoop & exec_loop )
 {
   /* Add dependencies to cache! */
-  cache_.access(thunk.hash());
+  cache_.access(thunk.hash(), true);
   for (auto & item : join_containers(thunk.values(), thunk.executables())) {
-    cache_.access(item.first);
+    cache_.access(item.first, true);
   }
 
   HTTPRequest request = generate_request( thunk );
 
   exec_loop.make_http_request<TCPConnection>( thunk.hash(),
     address_, request,
-    [this] ( const uint64_t, const string & thunk_hash,
+    [this, thunk] ( const uint64_t, const string & thunk_hash,
              const HTTPResponse & http_response ) -> bool
     {
       running_jobs_--;
@@ -83,9 +83,15 @@ void GGExecutionEngine::force_thunk( const Thunk & thunk,
 
         gg::cache::insert( response.thunk_hash, response.outputs.at( 0 ).hash );
 
+        /* Unpin dependencies from cache! */
+        cache_.unpin(thunk.hash());
+        for (auto & item : join_containers(thunk.values(), thunk.executables())) {
+          cache_.unpin(item.first);
+        }
+
         vector<ThunkOutput> thunk_outputs;
         for ( auto & output : response.outputs ) {
-          cache_.access(output.hash);
+          cache_.access(output.hash, false);
           thunk_outputs.emplace_back( move( output.hash ), move( output.tag ) );
         }
 

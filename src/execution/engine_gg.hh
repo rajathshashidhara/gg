@@ -10,21 +10,21 @@
 #include "thunk/thunk.hh"
 #include "util/lru.hh"
 
-#define CACHE_SIZE std::numeric_limits<size_t>::max()
-
 class GGExecutionEngine : public ExecutionEngine
 {
 private:
   Address address_;
-  LRU cache_ { CACHE_SIZE };
+  LRU cache_;
 
   size_t running_jobs_ { 0 };
 
   HTTPRequest generate_request( const gg::thunk::Thunk & thunk );
 
 public:
-  GGExecutionEngine( const size_t max_jobs, const Address & address )
-    : ExecutionEngine( max_jobs ), address_( address )
+  GGExecutionEngine( const size_t max_jobs,
+                     const Address & address,
+                     size_t cache_size = std::numeric_limits<size_t>::max())
+    : ExecutionEngine( max_jobs ), address_( address ), cache_ ( cache_size )
   {}
 
   void force_thunk( const gg::thunk::Thunk & thunk,
