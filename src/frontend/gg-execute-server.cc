@@ -184,7 +184,7 @@ int main( int argc, char * argv[] )
       /* GET dependencies! */
       if (get_queue.size() > 0) {
         shared_ptr<ExecutionInfo> get_info = get_queue.front();
-        exec_queue.pop_front();
+        get_queue.pop_front();
 
         get_info->timelog->add_point("begin_prefetch");
 
