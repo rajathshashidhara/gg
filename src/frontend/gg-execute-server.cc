@@ -26,8 +26,11 @@
 #include "util/pipe.hh"
 #include "util/iterator.hh"
 #include "util/lru.hh"
+#include "util/optional.hh"
+#include "util/timelog.hh"
 
 using namespace std;
+using namespace std::chrono;
 using namespace gg;
 
 string get_canned_response( const int status, const HTTPRequest & request )
@@ -60,6 +63,7 @@ struct ExecutionInfo {
   weak_ptr<TCPConnection> connection;
   const HTTPRequest http_request;
   const protobuf::ExecutionRequest exec_request;
+  Optional<TimeLog> timelog { };
   string output { "" };
   int status { 0 };
 
@@ -100,18 +104,18 @@ int main( int argc, char * argv[] )
 
     auto cache = make_shared<LRU>(cache_size);
     ExecutionLoop loop;
-    deque<ExecutionInfo> exec_queue;
-    deque<ExecutionInfo> put_queue;
-    bool in_exec = false;
+    deque<shared_ptr<ExecutionInfo>> get_queue;
+    deque<shared_ptr<ExecutionInfo>> exec_queue;
+    deque<shared_ptr<ExecutionInfo>> put_queue;
 
     loop.make_listener( listen_addr,
-      [cache, &exec_queue] ( ExecutionLoop & loop, TCPSocket && socket ) {
+      [&get_queue] ( ExecutionLoop & loop, TCPSocket && socket ) {
         /* an incoming connection! */
 
         auto request_parser = make_shared<HTTPRequestParser>();
 
         loop.add_connection<TCPSocket>( move( socket ),
-          [request_parser, &loop, cache, &exec_queue] ( shared_ptr<TCPConnection> connection, string && data ) {
+          [request_parser, &get_queue] ( shared_ptr<TCPConnection> connection, string && data ) {
             request_parser->parse( move( data ) );
 
             while ( not request_parser->empty() ) {
@@ -141,73 +145,10 @@ int main( int argc, char * argv[] )
                 continue;
               }
 
-              /* GET phase */
-              cache->cleanup(true);
-              loop.add_child_process( "thunk-get",
-                [conn_weak=weak_ptr<TCPConnection>( connection ),
-                http_request=move( http_request ), exec_request, cache, &exec_queue]
-                ( const uint64_t, const string &, const int ) { /* success callback */
-
-                  /* Add dependencies to cache */
-                  for (auto & request_item : exec_request.thunks()) {
-                    const string & hash = request_item.hash();
-                    gg::thunk::Thunk thunk { ThunkReader::read(paths::blob(hash), hash) };
-                    cache->access(thunk.hash(), true);
-                    for (auto& dep : join_containers(thunk.values(), thunk.executables())) {
-                      cache->access(dep.first, true);
-                    }
-                  }
-
-                  /* Move request to exec queue */
-                  exec_queue.emplace_back(conn_weak, move(http_request), move(exec_request));
-                },
-                [exec_request] () -> int { /* child process */
-                  setenv( "GG_STORAGE_URI", exec_request.storage_backend().c_str(), true );
-
-                  for ( auto & request_item : exec_request.thunks() ) {
-                    roost::atomic_create( base64::decode( request_item.data() ),
-                                          paths::blob( request_item.hash() ) );
-                  }
-
-                  vector<storage::GetRequest> download_items;
-                  for ( auto & request_item : exec_request.thunks() ) {
-                    const string & hash = request_item.hash();
-                    gg::thunk::Thunk thunk { ThunkReader::read(paths::blob(hash), hash) };
-                    bool executables = false;
-
-                    auto check_dep =
-                      [&download_items, &executables]( const gg::thunk::Thunk::DataItem & item ) -> void
-                      {
-                        const auto target_path = gg::paths::blob( item.first );
-
-                        if ( not roost::exists( target_path )
-                            or roost::file_size( target_path ) != gg::hash::size( item.first ) ) {
-                          if ( executables ) {
-                            download_items.push_back( { item.first, target_path, 0544 } );
-                          }
-                          else {
-                            download_items.push_back( { item.first, target_path, 0444 } );
-                          }
-                        }
-                      };
-
-                    for_each( thunk.values().cbegin(), thunk.values().cend(),
-                              check_dep );
-
-                    executables = true;
-                    for_each( thunk.executables().cbegin(), thunk.executables().cend(),
-                              check_dep );
-                  }
-
-                  if ( download_items.size() > 0 ) {
-                    auto storage_backend = StorageBackend::create_backend( gg::remote::storage_backend_uri() );
-                    storage_backend->get( download_items );
-                  }
-
-                  return 0;
-                },
-                false
-              );
+              shared_ptr<ExecutionInfo> exec_info = make_shared<ExecutionInfo>(weak_ptr<TCPConnection>(connection),
+                                move(http_request), move(exec_request));
+              exec_info->timelog.reset(); /*> Reset timelog */
+              get_queue.push_back(exec_info);
             }
 
             return true;
@@ -221,15 +162,111 @@ int main( int argc, char * argv[] )
         );
 
         return true;
-      } );
+      }
+    );
+
+    std::chrono::milliseconds stall_start;
+    bool in_exec, in_get, in_put, in_stall;
+    in_exec = in_get = in_put = in_stall = false;
 
     while ( true ) {
       loop.loop_once( -1 );
 
-      /* Launch new execution */
-      if (!in_exec && exec_queue.size() > 0) {
-        ExecutionInfo exec_info = exec_queue.front();
+      /* Enter stall if! */
+      /* 1. Not already in stall! */
+      /* 2. Get in-progress or queued */
+      /* 3. No execution in-progress or queued */
+      if (!in_stall && (in_get || get_queue.size() > 0) && (!in_exec && exec_queue.size() == 0)) {
+        in_stall = true;
+        stall_start = duration_cast<milliseconds>(system_clock::now().time_since_epoch());
+      }
+
+      /* GET dependencies! */
+      if (get_queue.size() > 0) {
+        shared_ptr<ExecutionInfo> get_info = get_queue.front();
         exec_queue.pop_front();
+
+        get_info->timelog->add_point("begin_prefetch");
+
+        /* GET phase */
+        cache->cleanup(true);
+        loop.add_child_process( "thunk-get",
+          [get_info, cache, &exec_queue, &in_get]
+          ( const uint64_t, const string &, const int ) { /* success callback */
+
+            /* Add dependencies to cache */
+            for (auto & request_item : get_info->exec_request.thunks()) {
+              const string & hash = request_item.hash();
+              gg::thunk::Thunk thunk { ThunkReader::read(paths::blob(hash), hash) };
+              cache->access(thunk.hash(), true);
+              for (auto& dep : join_containers(thunk.values(), thunk.executables())) {
+                cache->access(dep.first, true);
+              }
+            }
+
+            get_info->timelog->add_point("prefetch");
+
+            in_get = false;
+
+            /* Move request to exec queue */
+            exec_queue.push_back(get_info);
+          },
+          [exec_request=get_info->exec_request] () -> int { /* child process */
+            setenv( "GG_STORAGE_URI", exec_request.storage_backend().c_str(), true );
+
+            for ( auto & request_item : exec_request.thunks() ) {
+              roost::atomic_create( base64::decode( request_item.data() ),
+                                    paths::blob( request_item.hash() ) );
+            }
+
+            vector<storage::GetRequest> download_items;
+            for ( auto & request_item : exec_request.thunks() ) {
+              const string & hash = request_item.hash();
+              gg::thunk::Thunk thunk { ThunkReader::read(paths::blob(hash), hash) };
+              bool executables = false;
+
+              auto check_dep =
+                [&download_items, &executables]( const gg::thunk::Thunk::DataItem & item ) -> void
+                {
+                  const auto target_path = gg::paths::blob( item.first );
+
+                  if ( not roost::exists( target_path )
+                      or roost::file_size( target_path ) != gg::hash::size( item.first ) ) {
+                    if ( executables ) {
+                      download_items.push_back( { item.first, target_path, 0544 } );
+                    }
+                    else {
+                      download_items.push_back( { item.first, target_path, 0444 } );
+                    }
+                  }
+                };
+
+              for_each( thunk.values().cbegin(), thunk.values().cend(),
+                        check_dep );
+
+              executables = true;
+              for_each( thunk.executables().cbegin(), thunk.executables().cend(),
+                        check_dep );
+            }
+
+            if ( download_items.size() > 0 ) {
+              auto storage_backend = StorageBackend::create_backend( gg::remote::storage_backend_uri() );
+              storage_backend->get( download_items );
+            }
+
+            return 0;
+          },
+          false
+        );
+        in_get = true;
+      }
+
+      /* Launch new execution! */
+      if (!in_exec && exec_queue.size() > 0) {
+        shared_ptr<ExecutionInfo> exec_info = exec_queue.front();
+        exec_queue.pop_front();
+
+        exec_info->timelog->add_point("begin_thunk");
 
         int pipe_fds[ 2 ];
         CheckSystemCall( "pipe", pipe( pipe_fds ) );
@@ -247,7 +284,7 @@ int main( int argc, char * argv[] )
             }
 
             /* Unpin the dependencies from cache! */
-            for (auto & request_item : exec_info.exec_request.thunks()) {
+            for (auto & request_item : exec_info->exec_request.thunks()) {
               const string & hash = request_item.hash();
               gg::thunk::Thunk thunk { ThunkReader::read(paths::blob(hash), hash) };
               cache->unpin(thunk.hash());
@@ -256,14 +293,17 @@ int main( int argc, char * argv[] )
               }
             }
 
-            /* Move request to exec queue */
-            put_queue.emplace_back(exec_info.connection, move(exec_info.http_request), move(exec_info.exec_request));
-            put_queue.back().output = output;
-            put_queue.back().status = status;
+            exec_info->output = output;
+            exec_info->status = status;
             in_exec = false;
+
+            exec_info->timelog->add_point("thunk");
+
+            /* Move request to exec queue */
+            put_queue.push_back(exec_info);
           },
-          [pipe_out_fd=pipe_fds[1], exec_info] () -> int {  /* child process */
-            setenv( "GG_STORAGE_URI", exec_info.exec_request.storage_backend().c_str(), true );
+          [pipe_out_fd=pipe_fds[1], exec_request=exec_info->exec_request] () -> int {  /* child process */
+            setenv( "GG_STORAGE_URI", exec_request.storage_backend().c_str(), true );
 
             vector<string> command {
               "gg-execute-static",
@@ -273,7 +313,7 @@ int main( int argc, char * argv[] )
               // "--cleanup"
             };
 
-            for ( auto & request_item : exec_info.exec_request.thunks() ) {
+            for ( auto & request_item : exec_request.thunks() ) {
               command.emplace_back( request_item.hash() );
             }
 
@@ -284,21 +324,30 @@ int main( int argc, char * argv[] )
           false
         );
 
+        if (in_stall) {
+          in_stall = false;
+          auto now = duration_cast<milliseconds>(system_clock::now().time_since_epoch());
+          cerr << "stall " << (now - stall_start).count() << endl;
+        }
         in_exec = true;
       }
 
-      /* PUT the data back! */
+      /* PUT output! */
       if (put_queue.size() > 0) {
-        ExecutionInfo put_info = put_queue.front();
+        shared_ptr<ExecutionInfo> put_info = put_queue.front();
         put_queue.pop_front();
+
+        put_info->timelog->add_point("begin_upload");
 
         loop.add_child_process(
           "thunk-put",
-          [put_info, cache]
+          [put_info, cache, &in_put]
           ( const uint64_t, const string &, const int ) { /* success callback */
+            in_put = false;
+
             protobuf::ExecutionResponse response;
 
-            for ( auto & request_item : put_info.exec_request.thunks() ) {
+            for ( auto & request_item : put_info->exec_request.thunks() ) {
               protobuf::ResponseItem execution_response;
               execution_response.set_thunk_hash( request_item.hash() );
 
@@ -334,17 +383,19 @@ int main( int argc, char * argv[] )
 
             cache->cleanup(true);
 
-            if (put_info.connection.expired()) {
+            if (put_info->connection.expired()) {
               return;
             }
 
-            response.set_return_code( put_info.status );
-            response.set_stdout( put_info.output );
+            put_info->timelog->add_point("upload");
+
+            response.set_return_code( put_info->status );
+            response.set_stdout( put_info->output + put_info->timelog->str());
 
             const string response_json = protoutil::to_json( response );
 
             HTTPResponse http_response;
-            http_response.set_request( put_info.http_request );
+            http_response.set_request( put_info->http_request );
             http_response.set_first_line( "HTTP/1.1 200 OK" );
             http_response.add_header( HTTPHeader{ "Content-Length", to_string( response_json.size() ) } );
             http_response.add_header( HTTPHeader{ "Content-Type", "application/octet-stream" } );
@@ -352,14 +403,14 @@ int main( int argc, char * argv[] )
             http_response.read_in_body( response_json );
             assert( http_response.state() == COMPLETE );
 
-            auto conn = put_info.connection.lock();
+            auto conn = put_info->connection.lock();
             conn->enqueue_write( http_response.str() );
           },
-          [put_info] () -> int {  /* child process */
-            setenv( "GG_STORAGE_URI", put_info.exec_request.storage_backend().c_str(), true );
+          [exec_request=put_info->exec_request] () -> int {  /* child process */
+            setenv( "GG_STORAGE_URI", exec_request.storage_backend().c_str(), true );
             vector<storage::PutRequest> requests;
 
-            for ( auto & request_item : put_info.exec_request.thunks() ) {
+            for ( auto & request_item : exec_request.thunks() ) {
               for ( const auto & tag : request_item.outputs() ) {
                 protobuf::OutputItem output_item;
                 Optional<cache::ReductionResult> result = cache::check( gg::hash::for_output( request_item.hash(), tag ) );
@@ -378,6 +429,7 @@ int main( int argc, char * argv[] )
           },
           false
         );
+        in_put = true;
       }
     }
   }
